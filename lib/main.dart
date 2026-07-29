@@ -26,6 +26,11 @@ import 'screens/menu/menu_screen.dart';
 import 'screens/stats/stats_screen.dart';
 import 'screens/settings/settings_screen.dart';
 import 'screens/plans/plans_screen.dart';
+import 'screens/restaurant/livreurs_screen.dart';
+import 'screens/restaurant/qrcode_screen.dart';
+import 'screens/restaurant/codes_promo_screen.dart';
+import 'screens/restaurant/restaurant_screen.dart';
+import 'screens/restaurant/apparence_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -134,23 +139,23 @@ class _MonMenuAppState extends State<MonMenuApp> {
         ),
         GoRoute(
           path: '/dashboard/livreurs',
-          builder: (_, __) => const _PlaceholderScreen(title: 'Livreurs'),
+          builder: (_, __) => const LivreursScreen(),
         ),
         GoRoute(
           path: '/dashboard/qrcode',
-          builder: (_, __) => const _PlaceholderScreen(title: 'QR Code'),
+          builder: (_, __) => const QrCodeScreen(),
         ),
         GoRoute(
           path: '/dashboard/codes-promo',
-          builder: (_, __) => const _PlaceholderScreen(title: 'Codes promo'),
+          builder: (_, __) => const CodesPromoScreen(),
         ),
         GoRoute(
           path: '/dashboard/restaurant',
-          builder: (_, __) => const _PlaceholderScreen(title: 'Mon restaurant'),
+          builder: (_, __) => const RestaurantScreen(),
         ),
         GoRoute(
           path: '/dashboard/apparence',
-          builder: (_, __) => const _PlaceholderScreen(title: 'Apparence'),
+          builder: (_, __) => const ApparenceScreen(),
         ),
         GoRoute(
           path: '/dashboard/plans',
@@ -219,54 +224,4 @@ class _MonMenuAppState extends State<MonMenuApp> {
   }
 }
 
-// ── Placeholder pour les écrans non encore implémentés ────────────────────────
-class _PlaceholderScreen extends StatelessWidget {
-  final String title;
-  const _PlaceholderScreen({required this.title});
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppColors.background,
-      appBar: AppBar(title: Text(title)),
-      drawer: Builder(builder: (_) {
-        try {
-          return const SizedBox.shrink();
-        } catch (_) {
-          return const SizedBox.shrink();
-        }
-      }),
-      body: Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              width: 72, height: 72,
-              decoration: BoxDecoration(
-                color: AppColors.gray100,
-                shape: BoxShape.circle,
-              ),
-              child: const Icon(
-                Icons.construction_rounded,
-                size: 36, color: AppColors.gray300,
-              ),
-            ),
-            const SizedBox(height: 16),
-            Text(
-              title,
-              style: const TextStyle(
-                fontSize: 18, fontWeight: FontWeight.w700,
-                color: AppColors.gray700,
-              ),
-            ),
-            const SizedBox(height: 6),
-            const Text(
-              'Cette section sera disponible prochainement',
-              style: TextStyle(fontSize: 13, color: AppColors.gray400),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
+// Tous les écrans sont désormais implémentés — _PlaceholderScreen supprimé.

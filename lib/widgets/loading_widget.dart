@@ -29,11 +29,11 @@ class LoadingWidget extends StatelessWidget {
   }
 }
 
-class ErrorWidget extends StatelessWidget {
+class AppErrorWidget extends StatelessWidget {
   final String message;
   final VoidCallback? onRetry;
 
-  const ErrorWidget({super.key, required this.message, this.onRetry});
+  const AppErrorWidget({super.key, required this.message, this.onRetry});
 
   @override
   Widget build(BuildContext context) {

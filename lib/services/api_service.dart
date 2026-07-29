@@ -191,6 +191,29 @@ class ApiService {
   Future<ApiResponse> createCodePromo(Map<String, dynamic> data) async =>
       post('/dashboard/codes-promo', data);
 
+  /// PATCH /dashboard/codes-promo/:id
+  Future<ApiResponse> updateCodePromo(String id, Map<String, dynamic> data) async =>
+      patch('/dashboard/codes-promo/$id', data);
+
+  /// DELETE /dashboard/codes-promo/:id
+  Future<ApiResponse> deleteCodePromo(String id) async =>
+      delete('/dashboard/codes-promo/$id');
+
+  /// POST /dashboard/livreurs
+  Future<ApiResponse> createLivreur(Map<String, dynamic> data) async =>
+      post('/dashboard/livreurs', data);
+
+  /// PATCH /dashboard/livreurs/:id
+  Future<ApiResponse> updateLivreur(String id, Map<String, dynamic> data) async =>
+      patch('/dashboard/livreurs/$id', data);
+
+  /// DELETE /dashboard/livreurs/:id
+  Future<ApiResponse> deleteLivreur(String id) async =>
+      delete('/dashboard/livreurs/$id');
+
+  /// GET /dashboard/qrcode
+  Future<ApiResponse> getQrCode() async => get('/dashboard/qrcode');
+
   /// GET /plans
   Future<ApiResponse> getPlans() async => get('/plans');
 }

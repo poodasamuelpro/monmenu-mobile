@@ -1,11 +1,11 @@
 // lib/screens/menu/menu_screen.dart
+// Menu complet — CRUD catégories + produits, toggle disponibilité
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../../services/api_service.dart';
 import '../../models/produit_model.dart';
+import '../../services/api_service.dart';
 import '../../theme/app_theme.dart';
-import '../../widgets/app_drawer.dart';
-import '../../widgets/loading_widget.dart' as lw;
+import '../../widgets/loading_widget.dart';
 
 class MenuScreen extends StatefulWidget {
   const MenuScreen({super.key});
@@ -14,27 +14,66 @@ class MenuScreen extends StatefulWidget {
   State<MenuScreen> createState() => _MenuScreenState();
 }
 
-class _MenuScreenState extends State<MenuScreen> {
+class _MenuScreenState extends State<MenuScreen> with SingleTickerProviderStateMixin {
   List<CategorieModel> _categories = [];
+  Map<String, List<ProduitModel>> _produitsByCategorie = {};
   bool _isLoading = true;
   String? _error;
+  TabController? _tabController;
 
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) => _load());
+    WidgetsBinding.instance.addPostFrameCallback((_) => _loadMenu());
   }
 
-  Future<void> _load() async {
+  @override
+  void dispose() {
+    _tabController?.dispose();
+    super.dispose();
+  }
+
+  Future<void> _loadMenu() async {
     setState(() { _isLoading = true; _error = null; });
-    final resp = await context.read<ApiService>().getMenu();
+    final api = context.read<ApiService>();
+
+    // Charger catégories + produits ensemble via /dashboard/menu
+    final resp = await api.getMenu();
     if (!mounted) return;
+
     if (resp.success) {
-      final list = resp.data?['categories'] as List? ?? [];
+      final data = resp.data ?? {};
+
+      // Extraire catégories
+      final catList = (data['categories'] as List? ?? [])
+          .map((j) => CategorieModel.fromJson(j as Map<String, dynamic>))
+          .toList();
+
+      // Extraire produits groupés par catégorie
+      final Map<String, List<ProduitModel>> byCateg = {};
+      for (final cat in catList) {
+        byCateg[cat.id] = [];
+      }
+
+      final prodList = (data['produits'] as List? ?? [])
+          .map((j) => ProduitModel.fromJson(j as Map<String, dynamic>))
+          .toList();
+
+      for (final prod in prodList) {
+        if (prod.categorieId.isNotEmpty) {
+          byCateg.putIfAbsent(prod.categorieId, () => []).add(prod);
+        }
+      }
+
+      _tabController?.dispose();
+      final newTabController = catList.isNotEmpty
+          ? TabController(length: catList.length, vsync: this)
+          : null;
+
       setState(() {
-        _categories = list
-            .map((e) => CategorieModel.fromJson(e as Map<String, dynamic>))
-            .toList();
+        _categories = catList;
+        _produitsByCategorie = byCateg;
+        _tabController = newTabController;
         _isLoading = false;
       });
     } else {
@@ -42,251 +81,682 @@ class _MenuScreenState extends State<MenuScreen> {
     }
   }
 
-  @override
-  Widget build(BuildContext context) {
-    return DefaultTabController(
-      length: _categories.isEmpty ? 1 : _categories.length,
-      child: Scaffold(
-        backgroundColor: AppColors.background,
-        appBar: AppBar(
-          title: const Text('Menu'),
-          actions: [
-            IconButton(
-              icon: const Icon(Icons.add_rounded),
-              onPressed: () => _showAddCategorieDialog(),
-              tooltip: 'Ajouter une catégorie',
-            ),
-          ],
-          bottom: _categories.isEmpty
-              ? null
-              : TabBar(
-                  isScrollable: true,
-                  labelColor: AppColors.primary,
-                  unselectedLabelColor: AppColors.gray400,
-                  indicatorColor: AppColors.primary,
-                  tabs: _categories.map((c) => Tab(text: c.nom)).toList(),
-                ),
-        ),
-        drawer: const AppDrawer(),
-        body: _isLoading
-            ? const Padding(
-                padding: EdgeInsets.all(16),
-                child: lw.ShimmerList(count: 5),
-              )
-            : _error != null
-                ? lw.ErrorWidget(message: _error!, onRetry: _load)
-                : _categories.isEmpty
-                    ? _EmptyMenu(onAdd: _showAddCategorieDialog)
-                    : TabBarView(
-                        children: _categories.map((cat) => _CategorieTab(
-                          categorie: cat,
-                          onRefresh: _load,
-                        )).toList(),
-                      ),
-        floatingActionButton: _categories.isNotEmpty
-            ? FloatingActionButton(
-                onPressed: () => _showAddProduitDialog(),
-                backgroundColor: AppColors.primary,
-                child: const Icon(Icons.add_rounded, color: Colors.white),
-              )
-            : null,
+  Future<void> _toggleProduit(ProduitModel prod) async {
+    final api = context.read<ApiService>();
+    final resp = await api.updateProduit(prod.id, {'disponible': !prod.disponible});
+    if (!mounted) return;
+    if (resp.success) {
+      _loadMenu();
+    } else {
+      _showSnack(resp.error ?? 'Erreur', isError: true);
+    }
+  }
+
+  void _showSnack(String msg, {bool isError = false}) {
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text(msg),
+      backgroundColor: isError ? AppColors.error : AppColors.success,
+    ));
+  }
+
+  void _showCategorieDialog({CategorieModel? categorie}) {
+    showDialog(
+      context: context,
+      builder: (_) => _CategorieDialog(
+        categorie: categorie,
+        onSaved: _loadMenu,
       ),
     );
   }
 
-  void _showAddCategorieDialog() {
-    final ctrl = TextEditingController();
+  void _showProduitDialog({ProduitModel? produit, String? categorieId}) {
+    final categId = categorieId ?? (produit?.categorieId) ??
+        (_categories.isNotEmpty ? _categories[_tabController?.index ?? 0].id : null);
     showDialog(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Nouvelle catégorie'),
-        content: TextField(
-          controller: ctrl,
-          decoration: const InputDecoration(hintText: 'Nom de la catégorie'),
-          autofocus: true,
-        ),
+      builder: (_) => _ProduitDialog(
+        produit: produit,
+        categorieId: categId,
+        categories: _categories,
+        onSaved: _loadMenu,
+      ),
+    );
+  }
+
+  void _confirmDeleteCategorie(CategorieModel cat) {
+    showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('Supprimer la catégorie'),
+        content: Text('Supprimer « ${cat.nom} » et tous ses produits ?'),
         actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Annuler')),
           TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Annuler'),
-          ),
-          ElevatedButton(
             onPressed: () async {
-              if (ctrl.text.trim().isEmpty) return;
-              Navigator.pop(ctx);
-              await context.read<ApiService>().createCategorie({
-                'nom': ctrl.text.trim(),
-              });
-              _load();
+              Navigator.pop(context);
+              final api = context.read<ApiService>();
+              final resp = await api.deleteCategorie(cat.id);
+              if (!mounted) return;
+              if (resp.success) {
+                _showSnack('Catégorie supprimée');
+                _loadMenu();
+              } else {
+                _showSnack(resp.error ?? 'Erreur', isError: true);
+              }
             },
-            child: const Text('Créer'),
+            style: TextButton.styleFrom(foregroundColor: AppColors.error),
+            child: const Text('Supprimer'),
           ),
         ],
       ),
     );
   }
 
-  void _showAddProduitDialog() {
-    // Navigation vers formulaire produit
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Fonctionnalité disponible prochainement')),
+  void _confirmDeleteProduit(ProduitModel prod) {
+    showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('Supprimer le produit'),
+        content: Text('Supprimer « ${prod.nom} » ?'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Annuler')),
+          TextButton(
+            onPressed: () async {
+              Navigator.pop(context);
+              final api = context.read<ApiService>();
+              final resp = await api.deleteProduit(prod.id);
+              if (!mounted) return;
+              if (resp.success) {
+                _showSnack('Produit supprimé');
+                _loadMenu();
+              } else {
+                _showSnack(resp.error ?? 'Erreur', isError: true);
+              }
+            },
+            style: TextButton.styleFrom(foregroundColor: AppColors.error),
+            child: const Text('Supprimer'),
+          ),
+        ],
+      ),
     );
   }
-}
-
-class _CategorieTab extends StatelessWidget {
-  final CategorieModel categorie;
-  final VoidCallback onRefresh;
-
-  const _CategorieTab({required this.categorie, required this.onRefresh});
 
   @override
   Widget build(BuildContext context) {
-    final produits = categorie.produits;
-    if (produits.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Icon(Icons.restaurant_menu_rounded,
-                size: 48, color: AppColors.gray200),
-            const SizedBox(height: 12),
-            const Text('Aucun produit dans cette catégorie',
-                style: TextStyle(color: AppColors.gray400, fontSize: 14)),
-            const SizedBox(height: 16),
-            ElevatedButton.icon(
-              onPressed: () {},
-              icon: const Icon(Icons.add_rounded, size: 16),
-              label: const Text('Ajouter un produit'),
-            ),
-          ],
-        ),
-      );
+    return Scaffold(
+      backgroundColor: AppColors.background,
+      appBar: AppBar(
+        title: const Text('Menu'),
+        backgroundColor: Colors.white,
+        foregroundColor: AppColors.gray900,
+        elevation: 0,
+        surfaceTintColor: Colors.transparent,
+        bottom: _buildTabBar(),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.create_new_folder_rounded),
+            onPressed: () => _showCategorieDialog(),
+            tooltip: 'Nouvelle catégorie',
+          ),
+          IconButton(
+            icon: const Icon(Icons.refresh_rounded),
+            onPressed: _loadMenu,
+            tooltip: 'Actualiser',
+          ),
+        ],
+      ),
+      floatingActionButton: _categories.isNotEmpty
+          ? FloatingActionButton.extended(
+              onPressed: () => _showProduitDialog(),
+              backgroundColor: AppColors.primary,
+              icon: const Icon(Icons.add_rounded, color: Colors.white),
+              label: const Text('Produit', style: TextStyle(color: Colors.white)),
+            )
+          : null,
+      body: _buildBody(),
+    );
+  }
+
+  PreferredSize? _buildTabBar() {
+    if (_isLoading || _error != null || _categories.isEmpty) return null;
+    return PreferredSize(
+      preferredSize: const Size.fromHeight(48),
+      child: TabBar(
+        controller: _tabController,
+        isScrollable: true,
+        tabAlignment: TabAlignment.start,
+        labelColor: AppColors.primary,
+        unselectedLabelColor: AppColors.gray500,
+        indicatorColor: AppColors.primary,
+        indicatorWeight: 2,
+        labelStyle: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+        unselectedLabelStyle: const TextStyle(fontWeight: FontWeight.w400, fontSize: 13),
+        tabs: _categories.map((c) => Tab(text: c.nom)).toList(),
+      ),
+    );
+  }
+
+  Widget _buildBody() {
+    if (_isLoading) return const LoadingWidget(message: 'Chargement du menu…');
+    if (_error != null) return AppErrorWidget(message: _error!, onRetry: _loadMenu);
+
+    if (_categories.isEmpty) {
+      return _buildEmptyMenu();
     }
-    return ListView.builder(
-      padding: const EdgeInsets.all(16),
-      itemCount: produits.length,
-      itemBuilder: (ctx, i) => _ProduitTile(produit: produits[i]),
+
+    return TabBarView(
+      controller: _tabController,
+      children: _categories.map((cat) => _buildCategoriePage(cat)).toList(),
+    );
+  }
+
+  Widget _buildEmptyMenu() {
+    return Center(child: Column(mainAxisSize: MainAxisSize.min, children: [
+      Icon(Icons.restaurant_menu_rounded, size: 64, color: AppColors.gray300),
+      const SizedBox(height: 16),
+      const Text('Menu vide', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600, color: AppColors.gray600)),
+      const SizedBox(height: 8),
+      const Text('Commencez par créer une catégorie', style: TextStyle(color: AppColors.gray400)),
+      const SizedBox(height: 24),
+      ElevatedButton.icon(
+        onPressed: () => _showCategorieDialog(),
+        icon: const Icon(Icons.add_rounded),
+        label: const Text('Créer une catégorie'),
+        style: ElevatedButton.styleFrom(
+          backgroundColor: AppColors.primary, foregroundColor: Colors.white,
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+        ),
+      ),
+    ]));
+  }
+
+  Widget _buildCategoriePage(CategorieModel cat) {
+    final produits = _produitsByCategorie[cat.id] ?? [];
+
+    return RefreshIndicator(
+      onRefresh: _loadMenu,
+      color: AppColors.primary,
+      child: CustomScrollView(
+        slivers: [
+          // Header catégorie avec actions
+          SliverToBoxAdapter(child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+            child: Row(children: [
+              Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text(cat.nom, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: AppColors.gray900)),
+                if (cat.description != null)
+                  Text(cat.description!, style: const TextStyle(fontSize: 12, color: AppColors.gray400)),
+                Text('${produits.length} produit${produits.length != 1 ? 's' : ''}',
+                    style: const TextStyle(fontSize: 12, color: AppColors.gray400)),
+              ])),
+              // Editer catégorie
+              IconButton(
+                icon: const Icon(Icons.edit_rounded, size: 18, color: AppColors.primary),
+                onPressed: () => _showCategorieDialog(categorie: cat),
+                tooltip: 'Modifier la catégorie',
+              ),
+              // Supprimer catégorie
+              IconButton(
+                icon: const Icon(Icons.delete_outline_rounded, size: 18, color: AppColors.error),
+                onPressed: () => _confirmDeleteCategorie(cat),
+                tooltip: 'Supprimer la catégorie',
+              ),
+            ]),
+          )),
+
+          // Liste produits
+          if (produits.isEmpty)
+            SliverFillRemaining(
+              hasScrollBody: false,
+              child: Center(child: Column(mainAxisSize: MainAxisSize.min, children: [
+                Icon(Icons.fastfood_rounded, size: 48, color: AppColors.gray300),
+                const SizedBox(height: 12),
+                const Text('Aucun produit dans cette catégorie', style: TextStyle(color: AppColors.gray400)),
+                const SizedBox(height: 16),
+                OutlinedButton.icon(
+                  onPressed: () => _showProduitDialog(categorieId: cat.id),
+                  icon: const Icon(Icons.add_rounded, size: 16),
+                  label: const Text('Ajouter un produit'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: AppColors.primary,
+                    side: const BorderSide(color: AppColors.primary),
+                  ),
+                ),
+              ])),
+            )
+          else
+            SliverPadding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 80),
+              sliver: SliverList(
+                delegate: SliverChildBuilderDelegate(
+                  (_, i) => Padding(
+                    padding: const EdgeInsets.only(bottom: 10),
+                    child: _ProduitCard(
+                      produit: produits[i],
+                      onEdit: () => _showProduitDialog(produit: produits[i]),
+                      onDelete: () => _confirmDeleteProduit(produits[i]),
+                      onToggle: () => _toggleProduit(produits[i]),
+                    ),
+                  ),
+                  childCount: produits.length,
+                ),
+              ),
+            ),
+        ],
+      ),
     );
   }
 }
 
-class _ProduitTile extends StatelessWidget {
+// ── Card produit ──────────────────────────────────────────────────────────────
+class _ProduitCard extends StatelessWidget {
   final ProduitModel produit;
-  const _ProduitTile({required this.produit});
+  final VoidCallback onEdit;
+  final VoidCallback onDelete;
+  final VoidCallback onToggle;
+
+  const _ProduitCard({
+    required this.produit,
+    required this.onEdit,
+    required this.onDelete,
+    required this.onToggle,
+  });
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      margin: const EdgeInsets.only(bottom: 10),
-      padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: AppColors.gray100),
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: produit.disponible ? AppColors.gray200 : AppColors.gray200),
+        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.04), blurRadius: 4, offset: const Offset(0, 2))],
       ),
-      child: Row(
-        children: [
-          // Image
-          Container(
-            width: 56, height: 56,
-            decoration: BoxDecoration(
-              color: AppColors.gray100,
-              borderRadius: BorderRadius.circular(10),
+      child: Opacity(
+        opacity: produit.disponible ? 1.0 : 0.6,
+        child: Row(children: [
+          // Image produit
+          ClipRRect(
+            borderRadius: const BorderRadius.only(
+              topLeft: Radius.circular(11),
+              bottomLeft: Radius.circular(11),
             ),
-            child: produit.imageUrl != null
-                ? ClipRRect(
-                    borderRadius: BorderRadius.circular(10),
-                    child: Image.network(
-                      produit.imageUrl!,
-                      fit: BoxFit.cover,
-                      errorBuilder: (_, __, ___) => const Icon(
-                        Icons.fastfood_rounded,
-                        color: AppColors.gray300, size: 24,
-                      ),
-                    ),
-                  )
-                : const Icon(Icons.fastfood_rounded,
-                    color: AppColors.gray300, size: 24),
+            child: SizedBox(
+              width: 80, height: 80,
+              child: produit.imageUrl != null
+                  ? Image.network(produit.imageUrl!, fit: BoxFit.cover,
+                      errorBuilder: (_, __, ___) => _imagePlaceholder())
+                  : _imagePlaceholder(),
+            ),
           ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
+
+          // Infos
+          Expanded(child: Padding(
+            padding: const EdgeInsets.all(12),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Row(children: [
+                Expanded(child: Text(
                   produit.nom,
-                  style: const TextStyle(
-                    fontSize: 14, fontWeight: FontWeight.w600,
-                    color: AppColors.gray800,
+                  style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14, color: AppColors.gray900),
+                  maxLines: 1, overflow: TextOverflow.ellipsis,
+                )),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: produit.disponible
+                        ? AppColors.success.withValues(alpha: 0.1)
+                        : AppColors.gray100,
+                    borderRadius: BorderRadius.circular(20),
                   ),
-                ),
-                if (produit.description != null)
-                  Text(
-                    produit.description!,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      fontSize: 12, color: AppColors.gray400,
+                  child: Text(
+                    produit.disponible ? 'Disponible' : 'Indisponible',
+                    style: TextStyle(
+                      fontSize: 10, fontWeight: FontWeight.w600,
+                      color: produit.disponible ? AppColors.success : AppColors.gray400,
                     ),
                   ),
-                const SizedBox(height: 4),
-                Text(
-                  produit.prixFormate,
-                  style: const TextStyle(
-                    fontSize: 14, fontWeight: FontWeight.w700,
-                    color: AppColors.primary,
-                  ),
                 ),
+              ]),
+              if (produit.description != null) ...[
+                const SizedBox(height: 2),
+                Text(produit.description!, style: const TextStyle(fontSize: 12, color: AppColors.gray400), maxLines: 1, overflow: TextOverflow.ellipsis),
               ],
+              const SizedBox(height: 6),
+              Row(children: [
+                Text(
+                  '${produit.prix.toStringAsFixed(0)} FCFA',
+                  style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14, color: AppColors.primary),
+                ),
+                if (produit.variantes.isNotEmpty) ...[
+                  const SizedBox(width: 8),
+                  Text('+ ${produit.variantes.length} variante${produit.variantes.length > 1 ? 's' : ''}',
+                      style: const TextStyle(fontSize: 11, color: AppColors.gray400)),
+                ],
+              ]),
+            ]),
+          )),
+
+          // Actions
+          Column(mainAxisSize: MainAxisSize.min, children: [
+            Switch(
+              value: produit.disponible,
+              onChanged: (_) => onToggle(),
+              activeThumbColor: Colors.white,
+              activeTrackColor: AppColors.success,
+              materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
             ),
-          ),
-          // Disponible toggle
-          Switch(
-            value: produit.disponible,
-            onChanged: (_) {},
-            activeThumbColor: AppColors.primary,
-            activeTrackColor: AppColors.primaryLight,
-          ),
-        ],
+            Row(mainAxisSize: MainAxisSize.min, children: [
+              IconButton(
+                icon: const Icon(Icons.edit_rounded, size: 16),
+                onPressed: onEdit,
+                color: AppColors.primary,
+                constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                padding: EdgeInsets.zero,
+              ),
+              IconButton(
+                icon: const Icon(Icons.delete_outline_rounded, size: 16),
+                onPressed: onDelete,
+                color: AppColors.error,
+                constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                padding: EdgeInsets.zero,
+              ),
+            ]),
+            const SizedBox(height: 4),
+          ]),
+        ]),
       ),
+    );
+  }
+
+  Widget _imagePlaceholder() {
+    return Container(
+      color: AppColors.gray100,
+      child: const Center(child: Icon(Icons.fastfood_rounded, color: AppColors.gray300, size: 32)),
     );
   }
 }
 
-class _EmptyMenu extends StatelessWidget {
-  final VoidCallback onAdd;
-  const _EmptyMenu({required this.onAdd});
+// ── Dialog catégorie ───────────────────────────────────────────────────────────
+class _CategorieDialog extends StatefulWidget {
+  final CategorieModel? categorie;
+  final VoidCallback onSaved;
+  const _CategorieDialog({this.categorie, required this.onSaved});
+
+  @override
+  State<_CategorieDialog> createState() => _CategorieDialogState();
+}
+
+class _CategorieDialogState extends State<_CategorieDialog> {
+  final _formKey = GlobalKey<FormState>();
+  late final TextEditingController _nomCtrl;
+  late final TextEditingController _descCtrl;
+  bool _isLoading = false;
+
+  bool get _isEdit => widget.categorie != null;
+
+  @override
+  void initState() {
+    super.initState();
+    _nomCtrl = TextEditingController(text: widget.categorie?.nom ?? '');
+    _descCtrl = TextEditingController(text: widget.categorie?.description ?? '');
+  }
+
+  @override
+  void dispose() { _nomCtrl.dispose(); _descCtrl.dispose(); super.dispose(); }
+
+  Future<void> _save() async {
+    if (!_formKey.currentState!.validate()) return;
+    setState(() => _isLoading = true);
+    final api = context.read<ApiService>();
+    final payload = {
+      'nom': _nomCtrl.text.trim(),
+      if (_descCtrl.text.trim().isNotEmpty) 'description': _descCtrl.text.trim(),
+    };
+    final resp = _isEdit
+        ? await api.updateCategorie(widget.categorie!.id, payload)
+        : await api.createCategorie(payload);
+    if (!mounted) return;
+    setState(() => _isLoading = false);
+    if (resp.success) {
+      Navigator.pop(context);
+      widget.onSaved();
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(resp.error ?? 'Erreur'), backgroundColor: AppColors.error));
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
-    return Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const Icon(Icons.menu_book_rounded,
-              size: 64, color: AppColors.gray200),
-          const SizedBox(height: 16),
-          const Text(
-            'Votre menu est vide',
-            style: TextStyle(
-              fontSize: 18, fontWeight: FontWeight.w700,
-              color: AppColors.gray600,
+    return AlertDialog(
+      title: Text(_isEdit ? 'Modifier la catégorie' : 'Nouvelle catégorie'),
+      content: Form(
+        key: _formKey,
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          TextFormField(
+            controller: _nomCtrl,
+            decoration: InputDecoration(
+              labelText: 'Nom de la catégorie *',
+              prefixIcon: const Icon(Icons.category_rounded, size: 18, color: AppColors.gray400),
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+            ),
+            validator: (v) => (v == null || v.trim().isEmpty) ? 'Nom requis' : null,
+          ),
+          const SizedBox(height: 12),
+          TextFormField(
+            controller: _descCtrl,
+            maxLines: 2,
+            decoration: InputDecoration(
+              labelText: 'Description (optionnel)',
+              prefixIcon: const Padding(padding: EdgeInsets.only(bottom: 24), child: Icon(Icons.notes_rounded, size: 18, color: AppColors.gray400)),
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
             ),
           ),
-          const SizedBox(height: 6),
-          const Text(
-            'Commencez par créer des catégories\npuis ajoutez vos produits',
-            textAlign: TextAlign.center,
-            style: TextStyle(fontSize: 13, color: AppColors.gray400),
-          ),
-          const SizedBox(height: 20),
-          ElevatedButton.icon(
-            onPressed: onAdd,
-            icon: const Icon(Icons.add_rounded, size: 18),
-            label: const Text('Créer une catégorie'),
-          ),
-        ],
+        ]),
+      ),
+      actions: [
+        TextButton(onPressed: _isLoading ? null : () => Navigator.pop(context), child: const Text('Annuler')),
+        ElevatedButton(
+          onPressed: _isLoading ? null : _save,
+          style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary, foregroundColor: Colors.white),
+          child: _isLoading
+              ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+              : Text(_isEdit ? 'Modifier' : 'Créer'),
+        ),
+      ],
+    );
+  }
+}
+
+// ── Dialog produit ─────────────────────────────────────────────────────────────
+class _ProduitDialog extends StatefulWidget {
+  final ProduitModel? produit;
+  final String? categorieId;
+  final List<CategorieModel> categories;
+  final VoidCallback onSaved;
+  const _ProduitDialog({this.produit, this.categorieId, required this.categories, required this.onSaved});
+
+  @override
+  State<_ProduitDialog> createState() => _ProduitDialogState();
+}
+
+class _ProduitDialogState extends State<_ProduitDialog> {
+  final _formKey = GlobalKey<FormState>();
+  late final TextEditingController _nomCtrl;
+  late final TextEditingController _descCtrl;
+  late final TextEditingController _prixCtrl;
+  late final TextEditingController _imageCtrl;
+  late String? _selectedCategorieId;
+  bool _disponible = true;
+  bool _isLoading = false;
+
+  bool get _isEdit => widget.produit != null;
+
+  @override
+  void initState() {
+    super.initState();
+    _nomCtrl = TextEditingController(text: widget.produit?.nom ?? '');
+    _descCtrl = TextEditingController(text: widget.produit?.description ?? '');
+    _prixCtrl = TextEditingController(text: widget.produit?.prix.toStringAsFixed(0) ?? '');
+    _imageCtrl = TextEditingController(text: widget.produit?.imageUrl ?? '');
+    _selectedCategorieId = widget.produit?.categorieId ?? widget.categorieId ??
+        (widget.categories.isNotEmpty ? widget.categories.first.id : null);
+    _disponible = widget.produit?.disponible ?? true;
+  }
+
+  @override
+  void dispose() { _nomCtrl.dispose(); _descCtrl.dispose(); _prixCtrl.dispose(); _imageCtrl.dispose(); super.dispose(); }
+
+  Future<void> _save() async {
+    if (!_formKey.currentState!.validate()) return;
+    setState(() => _isLoading = true);
+    final api = context.read<ApiService>();
+    final payload = {
+      'nom': _nomCtrl.text.trim(),
+      if (_descCtrl.text.trim().isNotEmpty) 'description': _descCtrl.text.trim(),
+      'prix': double.tryParse(_prixCtrl.text) ?? 0,
+      if (_selectedCategorieId != null) 'categorie_id': _selectedCategorieId,
+      if (_imageCtrl.text.trim().isNotEmpty) 'image_url': _imageCtrl.text.trim(),
+      'disponible': _disponible,
+    };
+    final resp = _isEdit
+        ? await api.updateProduit(widget.produit!.id, payload)
+        : await api.createProduit(payload);
+    if (!mounted) return;
+    setState(() => _isLoading = false);
+    if (resp.success) {
+      Navigator.pop(context);
+      widget.onSaved();
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(resp.error ?? 'Erreur'), backgroundColor: AppColors.error));
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.all(24),
+        child: Form(
+          key: _formKey,
+          child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Row(children: [
+              const Icon(Icons.fastfood_rounded, color: AppColors.primary),
+              const SizedBox(width: 8),
+              Text(_isEdit ? 'Modifier le produit' : 'Nouveau produit',
+                  style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+              const Spacer(),
+              IconButton(icon: const Icon(Icons.close_rounded), onPressed: () => Navigator.pop(context), padding: EdgeInsets.zero),
+            ]),
+            const SizedBox(height: 20),
+
+            // Catégorie
+            if (widget.categories.isNotEmpty) ...[
+              const Text('Catégorie', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: AppColors.gray700)),
+              const SizedBox(height: 6),
+              DropdownButtonFormField<String>(
+                // ignore: deprecated_member_use
+                value: _selectedCategorieId,
+                decoration: InputDecoration(
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                ),
+                items: widget.categories.map((c) => DropdownMenuItem(value: c.id, child: Text(c.nom))).toList(),
+                onChanged: (v) => setState(() => _selectedCategorieId = v),
+              ),
+              const SizedBox(height: 12),
+            ],
+
+            // Nom
+            TextFormField(
+              controller: _nomCtrl,
+              decoration: InputDecoration(
+                labelText: 'Nom du produit *',
+                prefixIcon: const Icon(Icons.label_rounded, size: 18, color: AppColors.gray400),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+              ),
+              validator: (v) => (v == null || v.trim().isEmpty) ? 'Nom requis' : null,
+            ),
+            const SizedBox(height: 12),
+
+            // Description
+            TextFormField(
+              controller: _descCtrl,
+              maxLines: 2,
+              decoration: InputDecoration(
+                labelText: 'Description',
+                prefixIcon: const Padding(
+                  padding: EdgeInsets.only(bottom: 24),
+                  child: Icon(Icons.notes_rounded, size: 18, color: AppColors.gray400),
+                ),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+              ),
+            ),
+            const SizedBox(height: 12),
+
+            // Prix
+            TextFormField(
+              controller: _prixCtrl,
+              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              decoration: InputDecoration(
+                labelText: 'Prix (FCFA) *',
+                prefixIcon: const Icon(Icons.attach_money_rounded, size: 18, color: AppColors.gray400),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+              ),
+              validator: (v) {
+                if (v == null || v.trim().isEmpty) return 'Prix requis';
+                if (double.tryParse(v) == null) return 'Prix invalide';
+                return null;
+              },
+            ),
+            const SizedBox(height: 12),
+
+            // URL image
+            TextFormField(
+              controller: _imageCtrl,
+              keyboardType: TextInputType.url,
+              decoration: InputDecoration(
+                labelText: 'URL image (optionnel)',
+                prefixIcon: const Icon(Icons.image_rounded, size: 18, color: AppColors.gray400),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+              ),
+            ),
+            const SizedBox(height: 12),
+
+            // Disponible
+            SwitchListTile(
+              title: const Text('Disponible à la vente', style: TextStyle(fontSize: 14)),
+              value: _disponible,
+              onChanged: (v) => setState(() => _disponible = v),
+              activeThumbColor: Colors.white,
+              activeTrackColor: AppColors.success,
+              contentPadding: EdgeInsets.zero,
+            ),
+
+            const SizedBox(height: 20),
+
+            Row(children: [
+              Expanded(child: OutlinedButton(
+                onPressed: _isLoading ? null : () => Navigator.pop(context),
+                child: const Text('Annuler'),
+              )),
+              const SizedBox(width: 12),
+              Expanded(child: ElevatedButton(
+                onPressed: _isLoading ? null : _save,
+                style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary, foregroundColor: Colors.white),
+                child: _isLoading
+                    ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                    : Text(_isEdit ? 'Modifier' : 'Créer'),
+              )),
+            ]),
+          ]),
+        ),
       ),
     );
   }

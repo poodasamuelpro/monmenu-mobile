@@ -110,7 +110,7 @@ class _CommandesScreenState extends State<CommandesScreen> {
                       child: lw.ShimmerList(count: 5),
                     )
                   : provider.error != null
-                      ? lw.ErrorWidget(
+                      ? lw.AppErrorWidget(
                           message: provider.error!,
                           onRetry: provider.loadCommandes,
                         )
