@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Sécurité réseau: HTTPS uniquement, pas de cleartext -->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="false">
+        <trust-anchors>
+            <!-- Certificats système uniquement (pas d'AC utilisateur) -->
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
+
+    <!-- Supabase (production) -->
+    <domain-config cleartextTrafficPermitted="false">
+        <domain includeSubdomains="true">vkgtcfwnrhnvhsooiovm.supabase.co</domain>
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </domain-config>
+
+    <!-- API Backend Cloudflare -->
+    <domain-config cleartextTrafficPermitted="false">
+        <domain includeSubdomains="true">monmenu.app</domain>
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </domain-config>
+</network-security-config>
