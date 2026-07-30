@@ -93,9 +93,15 @@ class CommandesProvider extends ChangeNotifier {
         telephoneClient: old.telephoneClient,
         adresseLivraison: old.adresseLivraison,
         fraisLivraison: old.fraisLivraison,
+        modesPaiementId: old.modesPaiementId,
         notesClient: old.notesClient,
+        codePromoId: old.codePromoId,
+        reductionAppliquee: old.reductionAppliquee,
+        livreurId: old.livreurId,
         items: old.items,
         updatedAt: DateTime.now(),
+        numeroCommande: old.numeroCommande,
+        pointDeVenteId: old.pointDeVenteId,
       );
       _updatePendingCount();
       notifyListeners();

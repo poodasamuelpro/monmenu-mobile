@@ -2,6 +2,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../services/auth_service.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/app_drawer.dart';
@@ -117,12 +118,23 @@ class SettingsScreen extends StatelessWidget {
             _SettingsTile(
               icon: Icons.chat_rounded,
               label: 'Support WhatsApp',
-              onTap: () {},
+              onTap: () async {
+                const numero = '22500000000'; // Numéro support MonMenu
+                final uri = Uri.parse('https://wa.me/$numero?text=Bonjour%2C%20j%27ai%20besoin%20d%27aide%20avec%20MonMenu.');
+                if (await canLaunchUrl(uri)) {
+                  await launchUrl(uri, mode: LaunchMode.externalApplication);
+                }
+              },
             ),
             _SettingsTile(
               icon: Icons.email_outlined,
               label: 'support@monmenu.app',
-              onTap: () {},
+              onTap: () async {
+                final uri = Uri.parse('mailto:support@monmenu.app?subject=Support%20MonMenu');
+                if (await canLaunchUrl(uri)) {
+                  await launchUrl(uri);
+                }
+              },
             ),
 
             const SizedBox(height: 24),

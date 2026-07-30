@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:qr_flutter/qr_flutter.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../services/api_service.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/loading_widget.dart';
@@ -84,13 +85,22 @@ class _QrCodeScreenState extends State<QrCodeScreen> {
 
   Future<void> _shareUrl() async {
     if (_boutiqueUrl == null) return;
-    // Utiliser Clipboard comme fallback (share_plus non ajouté pour éviter complexité)
-    await Clipboard.setData(ClipboardData(text: _boutiqueUrl!));
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-      content: Text('Lien copié — partagez-le à vos clients'),
-      backgroundColor: AppColors.primary,
-    ));
+    // Partager via WhatsApp avec le lien de la boutique
+    final message = Uri.encodeComponent(
+      'Découvrez notre menu en ligne : $_boutiqueUrl',
+    );
+    final whatsappUri = Uri.parse('https://wa.me/?text=$message');
+    if (await canLaunchUrl(whatsappUri)) {
+      await launchUrl(whatsappUri, mode: LaunchMode.externalApplication);
+    } else {
+      // Fallback: copier dans le presse-papier
+      await Clipboard.setData(ClipboardData(text: _boutiqueUrl!));
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Lien copié — partagez-le à vos clients'),
+        backgroundColor: AppColors.primary,
+      ));
+    }
   }
 
   @override

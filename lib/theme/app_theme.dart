@@ -326,6 +326,7 @@ class TenantStatut {
       case 'essai': return AppColors.warning;
       case 'inactif': return AppColors.gray500;
       case 'suspendu': return AppColors.error;
+      case 'en_attente_confirmation': return AppColors.info;
       default: return AppColors.gray500;
     }
   }
@@ -336,6 +337,7 @@ class TenantStatut {
       case 'essai': return 'Essai';
       case 'inactif': return 'Inactif';
       case 'suspendu': return 'Suspendu';
+      case 'en_attente_confirmation': return 'En attente';
       default: return statut;
     }
   }

@@ -2,6 +2,7 @@
 // Apparence restaurant — couleur primaire, logo, bannière
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../services/api_service.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/loading_widget.dart';
@@ -167,10 +168,53 @@ class _ApparenceScreenState extends State<ApparenceScreen> {
   }
 
   void _showUploadInfo(String type) {
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-      content: Text('Upload $type : disponible sur la version web de MonMenu'),
-      duration: const Duration(seconds: 3),
-    ));
+    showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: Text('Upload $type'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'L\'upload de $type est disponible depuis la version web de MonMenu.',
+              style: const TextStyle(fontSize: 14, color: AppColors.gray600),
+            ),
+            const SizedBox(height: 12),
+            const Text(
+              'Accédez à :',
+              style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: AppColors.gray700),
+            ),
+            const SizedBox(height: 4),
+            const SelectableText(
+              'https://monmenu.app/dashboard/apparence',
+              style: TextStyle(fontSize: 13, color: AppColors.primary),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Fermer'),
+          ),
+          ElevatedButton.icon(
+            onPressed: () async {
+              Navigator.pop(context);
+              final uri = Uri.parse('https://monmenu.app/dashboard/apparence');
+              if (await canLaunchUrl(uri)) {
+                await launchUrl(uri, mode: LaunchMode.externalApplication);
+              }
+            },
+            icon: const Icon(Icons.open_in_new_rounded, size: 16),
+            label: const Text('Ouvrir le web'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.primary,
+              foregroundColor: Colors.white,
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   @override

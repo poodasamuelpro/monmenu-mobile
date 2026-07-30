@@ -2,6 +2,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../models/commande_model.dart';
 import '../../providers/commandes_provider.dart';
 import '../../services/api_service.dart';
@@ -57,6 +58,23 @@ class _CommandeDetailScreenState extends State<CommandeDetailScreen> {
         _error = resp.error ?? 'Commande introuvable';
         _isLoading = false;
       });
+    }
+  }
+
+  Future<void> _openWhatsApp(String telephone) async {
+    // Nettoyer le numéro: garder uniquement chiffres et +
+    final clean = telephone.replaceAll(RegExp(r'[\s\-\(\)]'), '');
+    final numero = clean.startsWith('+') ? clean.substring(1) : clean;
+    final uri = Uri.parse('https://wa.me/$numero');
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    } else {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Impossible d\'ouvrir WhatsApp'),
+          backgroundColor: AppColors.error,
+        ));
+      }
     }
   }
 
@@ -194,12 +212,34 @@ class _CommandeDetailScreenState extends State<CommandeDetailScreen> {
                   label: 'Nom',
                   value: c.nomClient ?? 'Anonyme',
                 ),
-                if (c.telephoneClient != null)
+                if (c.telephoneClient != null) ...[
                   _InfoRow(
                     icon: Icons.phone_outlined,
                     label: 'Téléphone',
                     value: c.telephoneClient!,
                   ),
+                  const SizedBox(height: 4),
+                  // ── Bouton WhatsApp client ────────────────────────────────
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton.icon(
+                      onPressed: () => _openWhatsApp(c.telephoneClient!),
+                      icon: const Icon(Icons.chat_rounded, size: 16),
+                      label: const Text('Contacter sur WhatsApp'),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: const Color(0xFF25D366),
+                        side: const BorderSide(color: Color(0xFF25D366)),
+                        padding: const EdgeInsets.symmetric(vertical: 10),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        textStyle: const TextStyle(
+                          fontSize: 13, fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
                 if (c.adresseLivraison != null)
                   _InfoRow(
                     icon: Icons.location_on_outlined,
