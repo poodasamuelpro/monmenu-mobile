@@ -46,6 +46,11 @@ dependencies:
   package_info_plus: ^8.1.3
   connectivity_plus: ^6.1.3
 
+  # Paiement — upload preuve (compression, stockage local, mime)
+  flutter_image_compress: ^2.3.0
+  path_provider: ^2.1.5
+  mime: ^1.0.6
+
   # UI helpers
   shimmer: ^3.0.0
   flutter_svg: ^2.0.17

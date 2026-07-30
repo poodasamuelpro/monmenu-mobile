@@ -4,6 +4,13 @@
 <dict>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
+	<!-- Permissions caméra et galerie — image_picker pour upload preuve paiement -->
+	<key>NSCameraUsageDescription</key>
+	<string>Utilisé pour photographier votre reçu de paiement et l'uploader comme preuve.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Utilisé pour sélectionner un reçu de paiement dans votre galerie photo.</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>Utilisé pour sauvegarder temporairement la preuve de paiement.</string>
 	<key>CFBundleDisplayName</key>
 	<string>Monmenu Manager</string>
 	<key>CFBundleExecutable</key>

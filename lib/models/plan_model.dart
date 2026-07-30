@@ -84,6 +84,42 @@ class AbonnementModel {
   final bool autoRenouvellement;
   final PlanModel? plan;
 
+  /// Montant payé (depuis l'historique).
+  final double? montantPaye;
+
+  /// Devise (XOF, EUR, etc.).
+  final String? devise;
+
+  /// Méthode de paiement utilisée (mobile_money, virement, carte).
+  final String? methodePaiement;
+
+  /// URL de la preuve de paiement soumise.
+  final String? preuveUrl;
+
+  /// Référence unique de paiement (ex: "MNMENU-2024-XXXXX").
+  final String? referencePaiement;
+
+  /// Nom de l'admin qui a confirmé le paiement.
+  final String? confirmeParNom;
+
+  /// Date de confirmation par l'admin.
+  final DateTime? confirmeLe;
+
+  /// Date de soumission de la preuve par le tenant.
+  final DateTime? soumisLe;
+
+  /// Date de rejet (si rejeté par l'admin).
+  final DateTime? rejeteLe;
+
+  /// Motif du rejet.
+  final String? motifRejet;
+
+  /// Délai d'expiration de la confirmation (38h après soumission).
+  final DateTime? delaiConfirmationExpireLe;
+
+  /// Heures restantes avant expiration du délai.
+  final int? heuresRestantesConfirmation;
+
   const AbonnementModel({
     required this.id,
     required this.tenantId,
@@ -94,6 +130,18 @@ class AbonnementModel {
     this.finLe,
     this.autoRenouvellement = true,
     this.plan,
+    this.montantPaye,
+    this.devise,
+    this.methodePaiement,
+    this.preuveUrl,
+    this.referencePaiement,
+    this.confirmeParNom,
+    this.confirmeLe,
+    this.soumisLe,
+    this.rejeteLe,
+    this.motifRejet,
+    this.delaiConfirmationExpireLe,
+    this.heuresRestantesConfirmation,
   });
 
   factory AbonnementModel.fromJson(Map<String, dynamic> json) {
@@ -103,23 +151,71 @@ class AbonnementModel {
       planId: json['plan_id'] as String? ?? '',
       statut: json['statut'] as String? ?? 'actif',
       periodicite: json['periodicite'] as String? ?? 'mensuel',
-      debutLe: json['debut_le'] != null
-          ? DateTime.tryParse(json['debut_le'] as String)
-          : null,
-      finLe: json['fin_le'] != null
-          ? DateTime.tryParse(json['fin_le'] as String)
-          : null,
+      debutLe: _parseDate(json['debut_le'] ?? json['date_debut']),
+      finLe: _parseDate(json['fin_le'] ?? json['date_fin']),
       autoRenouvellement: json['auto_renouvellement'] as bool? ?? true,
       plan: json['plans'] != null
           ? PlanModel.fromJson(json['plans'] as Map<String, dynamic>)
-          : null,
+          : json['plan'] != null
+              ? PlanModel.fromJson(json['plan'] as Map<String, dynamic>)
+              : null,
+      montantPaye: _toDouble(json['montant_paye']),
+      devise: json['devise'] as String?,
+      methodePaiement: json['methode_paiement'] as String?,
+      preuveUrl: json['preuve_url'] as String?,
+      referencePaiement: json['reference_paiement'] as String?,
+      confirmeParNom: json['confirme_par_nom'] as String?,
+      confirmeLe: _parseDate(json['confirme_le']),
+      soumisLe: _parseDate(json['soumis_le']),
+      rejeteLe: _parseDate(json['rejete_le']),
+      motifRejet: json['motif_rejet'] as String?,
+      delaiConfirmationExpireLe:
+          _parseDate(json['delai_confirmation_expire_le']),
+      heuresRestantesConfirmation:
+          (json['heures_restantes_confirmation'] as num?)?.toInt(),
     );
   }
 
+  static DateTime? _parseDate(dynamic v) {
+    if (v == null) return null;
+    return DateTime.tryParse(v as String);
+  }
+
+  static double? _toDouble(dynamic v) {
+    if (v == null) return null;
+    if (v is num) return v.toDouble();
+    return double.tryParse(v.toString());
+  }
+
   bool get isActif => statut == 'actif';
+  bool get isEnAttente => statut == 'en_attente_confirmation';
+  bool get isRejete => statut == 'rejete';
+
   int? get joursRestants {
     if (finLe == null) return null;
     return finLe!.difference(DateTime.now()).inDays;
+  }
+
+  /// Heures avant expiration du délai de confirmation admin (38h).
+  int get heuresAvantExpirationAdmin {
+    if (heuresRestantesConfirmation != null) {
+      return heuresRestantesConfirmation!;
+    }
+    if (delaiConfirmationExpireLe == null) return 0;
+    final diff =
+        delaiConfirmationExpireLe!.difference(DateTime.now()).inHours;
+    return diff < 0 ? 0 : diff;
+  }
+
+  String get statutLibelle {
+    switch (statut) {
+      case 'actif': return 'Actif';
+      case 'en_attente_confirmation': return 'En attente de confirmation';
+      case 'rejete': return 'Rejeté';
+      case 'expire': return 'Expiré';
+      case 'inactif': return 'Inactif';
+      default: return statut;
+    }
   }
 }
 

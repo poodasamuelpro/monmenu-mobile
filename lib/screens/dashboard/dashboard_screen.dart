@@ -13,8 +13,7 @@ import '../../models/commande_model.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/app_drawer.dart';
 import '../../widgets/loading_widget.dart' as lw;
-
-
+import '../../widgets/payment_alert_banner.dart';
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
 
@@ -37,6 +36,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
       // Charger données
       context.read<DashboardProvider>().loadAll();
+      context.read<DashboardProvider>().loadAbonnement();
       context.read<CommandesProvider>().loadCommandes();
     });
   }
@@ -101,6 +101,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         color: AppColors.primary,
         onRefresh: () async {
           await context.read<DashboardProvider>().loadAll();
+          await context.read<DashboardProvider>().loadAbonnement();
           await context.read<CommandesProvider>().loadCommandes();
         },
         child: SingleChildScrollView(
@@ -109,8 +110,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // ── Essai Banner ─────────────────────────────────────────────
-              if (tenant?.isEssai == true) _EssaiBanner(tenant: tenant!),
+              // ── Bandeau alerte paiement ───────────────────────────────
+              const PaymentAlertBanner(),
+
+              // ── Essai Banner (legacy — remplacé par PaymentAlertBanner) ──
+              // Maintenu pour les essais normaux (> 3 jours)
+              if (tenant?.isEssai == true && !(tenant?.essaiExpireBientot ?? false))
+                _EssaiBanner(tenant: tenant!),
 
               // ── Bonjour ──────────────────────────────────────────────────
               if (tenant != null) ...[

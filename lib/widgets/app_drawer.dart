@@ -15,6 +15,12 @@ class AppDrawer extends StatelessWidget {
     final tenant = auth.tenant;
     final route = GoRouterState.of(context).uri.path;
 
+    // Badge paiement en attente
+    final showPaymentBadge = tenant != null &&
+        (tenant.statut == 'en_attente_confirmation' ||
+            tenant.statut == 'inactif' ||
+            tenant.essaiExpireBientot);
+
     return Drawer(
       backgroundColor: AppColors.sidebar,
       width: 260,
@@ -130,6 +136,7 @@ class AppDrawer extends StatelessWidget {
                     label: 'Plans & Paiement',
                     route: '/dashboard/plans',
                     currentRoute: route,
+                    badge: showPaymentBadge,
                   ),
                   _NavItem(
                     icon: Icons.settings_rounded,
@@ -200,12 +207,14 @@ class _NavItem extends StatelessWidget {
   final String label;
   final String route;
   final String currentRoute;
+  final bool badge;
 
   const _NavItem({
     required this.icon,
     required this.label,
     required this.route,
     required this.currentRoute,
+    this.badge = false,
   });
 
   @override
@@ -244,6 +253,16 @@ class _NavItem extends StatelessWidget {
                     ),
                   ),
                 ),
+                if (badge && !isActive)
+                  Container(
+                    width: 8,
+                    height: 8,
+                    margin: const EdgeInsets.only(right: 4),
+                    decoration: const BoxDecoration(
+                      color: AppColors.warning,
+                      shape: BoxShape.circle,
+                    ),
+                  ),
                 if (isActive)
                   Container(
                     width: 4, height: 4,

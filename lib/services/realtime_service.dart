@@ -1,5 +1,5 @@
 // lib/services/realtime_service.dart
-// Supabase Realtime — abonnement aux nouvelles commandes via WebSocket
+// Supabase Realtime — abonnement aux nouvelles commandes + statut tenant
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/commande_model.dart';
@@ -7,6 +7,7 @@ import '../models/commande_model.dart';
 class RealtimeService extends ChangeNotifier {
   final SupabaseClient _supabase;
   RealtimeChannel? _channel;
+  RealtimeChannel? _tenantChannel;
   String? _tenantId;
   bool _isConnected = false;
 
@@ -20,6 +21,9 @@ class RealtimeService extends ChangeNotifier {
 
   Function(CommandeModel)? onNouvelleCommande;
   Function(String commandeId, String newStatut)? onStatutChange;
+
+  /// Callback déclenché quand le statut du tenant change (ex: actif après confirmation).
+  Function(String newStatut, Map<String, dynamic> payload)? onTenantStatusChange;
 
   // ── Abonner aux commandes du tenant ────────────────────────────────────────
   void subscribe(String tenantId) {
@@ -70,16 +74,60 @@ class RealtimeService extends ChangeNotifier {
         .subscribe((status, error) {
           _isConnected = status == RealtimeSubscribeStatus.subscribed;
           if (error != null) {
-            debugPrint('[Realtime] Error: $error');
+            if (kDebugMode) debugPrint('[Realtime] Error: $error');
           }
           notifyListeners();
         });
+  }
+
+  // ── Abonner aux changements de statut du tenant ────────────────────────────
+  /// S'abonne aux mises à jour du tenant pour détecter un changement de statut
+  /// d'abonnement (en_attente_confirmation → actif / rejete).
+  void subscribeTenantStatus(String tenantId) {
+    _tenantChannel?.unsubscribe();
+
+    _tenantChannel = _supabase
+        .channel('tenant_statut_$tenantId')
+        .onPostgresChanges(
+          event: PostgresChangeEvent.update,
+          schema: 'public',
+          table: 'tenants',
+          filter: PostgresChangeFilter(
+            type: PostgresChangeFilterType.eq,
+            column: 'id',
+            value: tenantId,
+          ),
+          callback: (payload) {
+            final newRecord = payload.newRecord;
+            final newStatut = newRecord['statut'] as String?;
+            if (newStatut != null) {
+              if (kDebugMode) {
+                debugPrint('[Realtime] Tenant statut changé: $newStatut');
+              }
+              onTenantStatusChange?.call(newStatut, newRecord);
+              notifyListeners();
+            }
+          },
+        )
+        .subscribe((status, error) {
+          if (error != null && kDebugMode) {
+            debugPrint('[Realtime] Tenant channel error: $error');
+          }
+        });
+  }
+
+  /// Désabonne uniquement le canal tenant status.
+  void unsubscribeTenantStatus() {
+    _tenantChannel?.unsubscribe();
+    _tenantChannel = null;
   }
 
   // ── Se désabonner ──────────────────────────────────────────────────────────
   void unsubscribe() {
     _channel?.unsubscribe();
     _channel = null;
+    _tenantChannel?.unsubscribe();
+    _tenantChannel = null;
     _isConnected = false;
     notifyListeners();
   }
@@ -95,3 +143,4 @@ class RealtimeService extends ChangeNotifier {
     super.dispose();
   }
 }
+

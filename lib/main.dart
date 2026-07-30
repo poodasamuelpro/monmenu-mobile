@@ -26,6 +26,7 @@ import 'screens/menu/menu_screen.dart';
 import 'screens/stats/stats_screen.dart';
 import 'screens/settings/settings_screen.dart';
 import 'screens/plans/plans_screen.dart';
+import 'screens/plans/abonnement_historique_screen.dart';
 import 'screens/restaurant/livreurs_screen.dart';
 import 'screens/restaurant/qrcode_screen.dart';
 import 'screens/restaurant/codes_promo_screen.dart';
@@ -160,6 +161,12 @@ class _MonMenuAppState extends State<MonMenuApp> {
         GoRoute(
           path: '/dashboard/plans',
           builder: (_, __) => const PlansScreen(),
+          routes: [
+            GoRoute(
+              path: 'historique',
+              builder: (_, __) => const AbonnementHistoriqueScreen(),
+            ),
+          ],
         ),
         GoRoute(
           path: '/dashboard/settings',

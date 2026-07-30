@@ -1,5 +1,6 @@
-package com.monmenumanager.monmenu_manager
+package com.monmenumanager.manage
 
 import io.flutter.embedding.android.FlutterActivity
 
 class MainActivity : FlutterActivity()
+

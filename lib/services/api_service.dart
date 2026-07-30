@@ -1,5 +1,6 @@
 // lib/services/api_service.dart
 // Client HTTP avec Bearer token, auto-refresh 401, sécurité HTTPS only
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
@@ -216,6 +217,98 @@ class ApiService {
 
   /// GET /plans
   Future<ApiResponse> getPlans() async => get('/plans');
+
+  // ── Paiement endpoints ─────────────────────────────────────────────────────
+
+  /// GET /paiement/statut
+  /// Retourne : {statut_tenant, abonnement{id, statut, reference_paiement,
+  /// soumis_le, delai_confirmation_expire_le, heures_restantes_confirmation,
+  /// message_38h}, essai_expire_le, jours_essai_restants, reference_active}
+  Future<ApiResponse> getAbonnementActif() async =>
+      get('/paiement/statut');
+
+  /// GET /paiement/reference
+  /// Retourne : {reference, instructions[]}
+  Future<ApiResponse> getReferencePaiement() async =>
+      get('/paiement/reference');
+
+  /// POST /paiement/soumettre — multipart/form-data
+  /// Champs: preuve (File), plan_id, methode_paiement, periodicite
+  /// Retourne : {success, abonnement_id, reference, delai_confirmation,
+  ///             heures_delai: 72, message_38h, plan{nom, montant, devise}}
+  ///
+  /// SEC-02 : Le token n'est jamais loggé.
+  /// SEC-07 : Idempotence — vérifier statut avant renvoi.
+  Future<ApiResponse> soumettrePreuvePaiement({
+    required String filePath,
+    required String planId,
+    required String methodePaiement,
+    required String periodicite,
+  }) async {
+    try {
+      final token = _authService.accessToken;
+      if (token == null || token.length < AppConfig.tokenMinLength) {
+        return ApiResponse.failure(401, 'Token manquant. Reconnectez-vous.');
+      }
+
+      final uri = _buildUri('/paiement/soumettre');
+      final request = http.MultipartRequest('POST', uri);
+
+      // SEC-02 : Authorization header, jamais loggé
+      request.headers['Authorization'] = 'Bearer $token';
+      request.headers['Accept'] = 'application/json';
+
+      // Champs texte
+      request.fields['plan_id'] = planId;
+      request.fields['methode_paiement'] = methodePaiement;
+      request.fields['periodicite'] = periodicite;
+
+      // Fichier preuve
+      final file = File(filePath);
+      if (!file.existsSync()) {
+        return ApiResponse.failure(0, 'Fichier preuve introuvable.');
+      }
+      final fileBytes = await file.readAsBytes();
+      final fileName = file.path.split('/').last;
+      final multipartFile = http.MultipartFile.fromBytes(
+        'preuve',
+        fileBytes,
+        filename: fileName,
+      );
+      request.files.add(multipartFile);
+
+      final streamedResponse = await request.send()
+          .timeout(const Duration(seconds: 60));
+      final response = await http.Response.fromStream(streamedResponse);
+
+      // SEC-02 : pas de log du token ni du contenu de la réponse en production
+      if (kDebugMode) {
+        debugPrint('[ApiService] soumettrePreuve status=${response.statusCode}');
+      }
+
+      return _parseResponse(response);
+    } on SocketException {
+      return ApiResponse.failure(0, 'Pas de connexion internet.');
+    } on TimeoutException {
+      return ApiResponse.failure(0, 'Délai d\'upload dépassé. Réessayez.');
+    } catch (e) {
+      if (kDebugMode) debugPrint('[ApiService] soumettrePreuve error: $e');
+      return ApiResponse.failure(0, 'Erreur lors de l\'upload.');
+    }
+  }
+
+  /// GET /paiement/historique?page=&limit=
+  /// Retourne : {abonnements[], total, page, limit, total_pages}
+  Future<ApiResponse> getHistoriqueAbonnements({
+    int page = 1,
+    int limit = 10,
+  }) async =>
+      get('/paiement/historique?page=$page&limit=$limit');
+
+  /// GET /paiement/notifications
+  /// Retourne : {notifications[], count, non_lues}
+  Future<ApiResponse> getPaiementNotifications() async =>
+      get('/paiement/notifications');
 }
 
 class ApiResponse {
