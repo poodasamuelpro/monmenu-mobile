@@ -1,5 +1,6 @@
 // lib/screens/stats/stats_screen.dart
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import 'package:fl_chart/fl_chart.dart';
 import '../../models/plan_model.dart';
@@ -31,7 +32,14 @@ class _StatsScreenState extends State<StatsScreen> {
 
     return Scaffold(
       backgroundColor: AppColors.background,
-      appBar: AppBar(title: const Text('Statistiques')),
+      appBar: AppBar(
+        title: const Text('Statistiques'),
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_rounded),
+          onPressed: () => context.canPop() ? context.pop() : context.go('/dashboard/commandes'),
+          tooltip: 'Retour',
+        ),
+      ),
       drawer: const AppDrawer(),
       body: RefreshIndicator(
         color: AppColors.primary,

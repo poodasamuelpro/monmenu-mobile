@@ -7,6 +7,7 @@ import 'package:fl_chart/fl_chart.dart';
 import '../../providers/dashboard_provider.dart';
 import '../../providers/commandes_provider.dart';
 import '../../services/auth_service.dart';
+import '../../services/notification_service.dart';
 import '../../services/realtime_service.dart';
 import '../../models/plan_model.dart';
 import '../../models/commande_model.dart';
@@ -29,9 +30,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
       final auth = context.read<AuthService>();
       final tenant = auth.tenant;
 
-      // Démarrer Realtime
+      // Démarrer Realtime + Notifications
       if (tenant != null) {
         context.read<RealtimeService>().subscribe(tenant.id);
+        context.read<NotificationService>().subscribe(tenant.id);
       }
 
       // Charger données

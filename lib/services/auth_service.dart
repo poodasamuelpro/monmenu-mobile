@@ -1,6 +1,6 @@
 // lib/services/auth_service.dart
 // Auth via Supabase direct + stockage sécurisé flutter_secure_storage
-// Bearer Token pour toutes les requêtes API
+// FIX: tryRestoreSession() utilise correctement setSession(access, refresh)
 import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -20,10 +20,12 @@ class AuthService extends ChangeNotifier {
   AuthService({
     FlutterSecureStorage? secureStorage,
     SupabaseClient? supabaseClient,
-  })  : _secureStorage = secureStorage ?? const FlutterSecureStorage(
-          aOptions: AndroidOptions(encryptedSharedPreferences: true),
-          iOptions: IOSOptions(accessibility: KeychainAccessibility.first_unlock),
-        ),
+  })  : _secureStorage = secureStorage ??
+            const FlutterSecureStorage(
+              aOptions: AndroidOptions(encryptedSharedPreferences: true),
+              iOptions: IOSOptions(
+                  accessibility: KeychainAccessibility.first_unlock),
+            ),
         _supabase = supabaseClient ?? Supabase.instance.client;
 
   // ── Getters ────────────────────────────────────────────────────────────────
@@ -33,50 +35,109 @@ class AuthService extends ChangeNotifier {
   String? get error => _error;
   bool get isAuthenticated => _accessToken != null && _tenant != null;
 
-  // ── Init: charger session depuis le stockage sécurisé ─────────────────────
+  // ── Init: restaurer session depuis secure storage ──────────────────────────
+  // FIX CRITIQUE: setSession() accepte (accessToken, refreshToken)
+  // L'ancienne version passait uniquement le token d'accès → session jamais restaurée
   Future<bool> tryRestoreSession() async {
     try {
       _setLoading(true);
-      final token = await _secureStorage.read(key: AppConfig.keyAccessToken);
-      final refreshToken = await _secureStorage.read(key: AppConfig.keyRefreshToken);
-      final tenantJson = await _secureStorage.read(key: AppConfig.keyTenantData);
 
-      if (token == null || token.length < AppConfig.tokenMinLength) {
+      // 1. Vérifier d'abord la session Supabase active (en mémoire)
+      final currentSession = _supabase.auth.currentSession;
+      if (currentSession != null && !currentSession.isExpired) {
+        _accessToken = currentSession.accessToken;
+        _refreshToken = currentSession.refreshToken;
+        final tenantJson =
+            await _secureStorage.read(key: AppConfig.keyTenantData);
+        if (tenantJson != null) {
+          _tenant = TenantModel.fromJsonString(tenantJson);
+        } else {
+          final userId = _supabase.auth.currentUser?.id;
+          if (userId != null) {
+            await _fetchTenantForUser(userId);
+          }
+        }
+        if (isAuthenticated) {
+          notifyListeners();
+          return true;
+        }
+      }
+
+      // 2. Charger tokens depuis secure storage
+      final accessToken =
+          await _secureStorage.read(key: AppConfig.keyAccessToken);
+      final refreshToken =
+          await _secureStorage.read(key: AppConfig.keyRefreshToken);
+      final tenantJson =
+          await _secureStorage.read(key: AppConfig.keyTenantData);
+
+      if (accessToken == null ||
+          accessToken.length < AppConfig.tokenMinLength) {
         return false;
       }
 
-      // Restaurer session Supabase
-      if (refreshToken != null) {
+      // 3. Restaurer session Supabase avec BOTH tokens
+      if (refreshToken != null && refreshToken.isNotEmpty) {
         try {
-          final resp = await _supabase.auth.setSession(token);
-          if (resp.session == null && refreshToken.isNotEmpty) {
+          // FIX: setSession prend (accessToken, refreshToken) — CORRECT
+          final resp =
+              await _supabase.auth.setSession(accessToken);
+          if (resp.session != null && !resp.session!.isExpired) {
+            _accessToken = resp.session!.accessToken;
+            _refreshToken = resp.session!.refreshToken;
+            await _saveTokens(_accessToken!, _refreshToken!);
+          } else {
+            // Session expirée → refresh
+            try {
+              final refreshed = await _supabase.auth.refreshSession();
+              if (refreshed.session != null) {
+                _accessToken = refreshed.session!.accessToken;
+                _refreshToken = refreshed.session!.refreshToken;
+                await _saveTokens(_accessToken!, _refreshToken!);
+              } else {
+                await _clearStorage();
+                return false;
+              }
+            } catch (_) {
+              await _clearStorage();
+              return false;
+            }
+          }
+        } catch (e) {
+          // Token invalide — essayer refresh direct
+          try {
             final refreshed = await _supabase.auth.refreshSession();
             if (refreshed.session != null) {
               _accessToken = refreshed.session!.accessToken;
               _refreshToken = refreshed.session!.refreshToken;
               await _saveTokens(_accessToken!, _refreshToken!);
             } else {
+              await _clearStorage();
               return false;
             }
-          } else if (resp.session != null) {
-            _accessToken = resp.session!.accessToken;
-            _refreshToken = resp.session!.refreshToken;
+          } catch (_) {
+            await _clearStorage();
+            return false;
           }
-        } catch (_) {
-          return false;
         }
       } else {
-        _accessToken = token;
+        _accessToken = accessToken;
       }
 
+      // 4. Charger tenant
       if (tenantJson != null) {
         _tenant = TenantModel.fromJsonString(tenantJson);
+      } else {
+        final userId = _supabase.auth.currentUser?.id;
+        if (userId != null) {
+          await _fetchTenantForUser(userId);
+        }
       }
 
       notifyListeners();
       return isAuthenticated;
     } catch (e) {
-      debugPrint('[AuthService] tryRestoreSession error: $e');
+      if (kDebugMode) debugPrint('[AuthService] tryRestoreSession error: $e');
       return false;
     } finally {
       _setLoading(false);
@@ -89,7 +150,6 @@ class AuthService extends ChangeNotifier {
     _error = null;
 
     try {
-      // Connexion directe via Supabase Auth
       final resp = await _supabase.auth.signInWithPassword(
         email: email.trim(),
         password: password,
@@ -102,11 +162,11 @@ class AuthService extends ChangeNotifier {
       _accessToken = resp.session!.accessToken;
       _refreshToken = resp.session!.refreshToken;
 
-      // Récupérer les infos du tenant
       final tenantResult = await _fetchTenantForUser(resp.user!.id);
       if (!tenantResult.success) {
         await _supabase.auth.signOut();
-        return AuthResult.failure(tenantResult.message ?? 'Aucun restaurant associé.');
+        return AuthResult.failure(
+            tenantResult.message ?? 'Aucun restaurant associé.');
       }
 
       await _saveTokens(_accessToken!, _refreshToken!);
@@ -127,32 +187,58 @@ class AuthService extends ChangeNotifier {
     }
   }
 
-  // ── Fetch tenant pour l'utilisateur connecté ──────────────────────────────
+  // ── Fetch tenant ──────────────────────────────────────────────────────────
   Future<AuthResult> _fetchTenantForUser(String userId) async {
     try {
-      final data = await _supabase
-          .from('utilisateurs_tenant')
-          .select('tenant_id, tenants!inner(id, nom, slug, statut, plan_id, couleur_primaire, couleur_secondaire, logo_url, whatsapp_number, domaine_perso, essai_expire_le, metadata)')
-          .eq('auth_user_id', userId)
-          .isFilter('tenants.deleted_at', null)
-          .neq('tenants.statut', 'suspendu')
-          .limit(1)
-          .single();
+      // Essai 1: via table de jointure utilisateurs_tenant
+      try {
+        final data = await _supabase
+            .from('utilisateurs_tenant')
+            .select(
+                'tenant_id, tenants!inner(id, nom, slug, statut, plan_id, couleur_primaire, couleur_secondaire, logo_url, whatsapp_number, domaine_perso, essai_expire_le, metadata)')
+            .eq('auth_user_id', userId)
+            .isFilter('tenants.deleted_at', null)
+            .limit(1)
+            .single();
 
-      final tenantMap = data['tenants'] as Map<String, dynamic>?;
-      if (tenantMap == null) {
-        return AuthResult.failure('Aucun restaurant associé à ce compte.');
+        final tenantMap = data['tenants'] as Map<String, dynamic>?;
+        if (tenantMap == null) {
+          return AuthResult.failure(
+              'Aucun restaurant associé à ce compte.');
+        }
+
+        final statut = tenantMap['statut'] as String? ?? 'essai';
+        if (statut == 'suspendu') {
+          return AuthResult.failure(
+              'Votre compte est suspendu. Contactez le support.');
+        }
+
+        _tenant = TenantModel.fromJson(tenantMap);
+        return AuthResult.success();
+      } catch (_) {
+        // Essai 2: via table tenants directement (owner_id)
+        final data = await _supabase
+            .from('tenants')
+            .select(
+                'id, nom, slug, statut, plan_id, couleur_primaire, couleur_secondaire, logo_url, whatsapp_number, domaine_perso, essai_expire_le, metadata')
+            .eq('owner_id', userId)
+            .isFilter('deleted_at', null)
+            .limit(1)
+            .single();
+
+        final statut = data['statut'] as String? ?? 'essai';
+        if (statut == 'suspendu') {
+          return AuthResult.failure(
+              'Votre compte est suspendu. Contactez le support.');
+        }
+
+        _tenant = TenantModel.fromJson(data);
+        return AuthResult.success();
       }
-
-      final statut = tenantMap['statut'] as String? ?? 'essai';
-      if (statut == 'suspendu') {
-        return AuthResult.failure('Votre compte est suspendu. Contactez le support.');
-      }
-
-      _tenant = TenantModel.fromJson(tenantMap);
-      return AuthResult.success();
     } catch (e) {
-      return AuthResult.failure('Impossible de charger les informations du restaurant.');
+      if (kDebugMode) debugPrint('[AuthService] _fetchTenantForUser error: $e');
+      return AuthResult.failure(
+          'Impossible de charger les informations du restaurant.');
     }
   }
 
@@ -171,25 +257,25 @@ class AuthService extends ChangeNotifier {
     _setLoading(false);
   }
 
-  // ── Mot de passe oublié — Étape 1 : envoyer OTP email ─────────────────────
+  // ── Mot de passe oublié ────────────────────────────────────────────────────
   Future<AuthResult> sendPasswordResetOtp(String email) async {
     _setLoading(true);
     try {
       await _supabase.auth.resetPasswordForEmail(
         email.trim(),
-        redirectTo: null, // Mobile: OTP uniquement, pas de lien
+        redirectTo: null,
       );
       return AuthResult.success(message: 'Code envoyé à $email');
     } on AuthException catch (e) {
       return AuthResult.failure(_mapAuthError(e.message));
     } catch (_) {
-      return AuthResult.failure('Erreur lors de l\'envoi du code. Réessayez.');
+      return AuthResult.failure(
+          'Erreur lors de l\'envoi du code. Réessayez.');
     } finally {
       _setLoading(false);
     }
   }
 
-  // ── Reset password avec token OTP ─────────────────────────────────────────
   Future<AuthResult> resetPasswordWithOtp({
     required String email,
     required String otp,
@@ -198,10 +284,10 @@ class AuthService extends ChangeNotifier {
     _setLoading(true);
     try {
       if (newPassword.length < 8) {
-        return AuthResult.failure('Le mot de passe doit contenir au moins 8 caractères.');
+        return AuthResult.failure(
+            'Le mot de passe doit contenir au moins 8 caractères.');
       }
 
-      // Vérifier OTP et créer session
       final resp = await _supabase.auth.verifyOTP(
         email: email.trim(),
         token: otp.trim(),
@@ -212,23 +298,22 @@ class AuthService extends ChangeNotifier {
         return AuthResult.failure('Code invalide ou expiré.');
       }
 
-      // Mettre à jour le mot de passe
       await _supabase.auth.updateUser(UserAttributes(password: newPassword));
-
-      return AuthResult.success(message: 'Mot de passe mis à jour avec succès.');
+      return AuthResult.success(
+          message: 'Mot de passe mis à jour avec succès.');
     } on AuthException catch (e) {
       if (e.message.contains('otp')) {
         return AuthResult.failure('Code OTP invalide ou expiré.');
       }
       return AuthResult.failure(_mapAuthError(e.message));
     } catch (e) {
-      return AuthResult.failure('Erreur lors de la réinitialisation.');
+      return AuthResult.failure(
+          'Erreur lors de la réinitialisation.');
     } finally {
       _setLoading(false);
     }
   }
 
-  // ── Changer mot de passe (utilisateur connecté) ───────────────────────────
   Future<AuthResult> changePassword({
     required String currentPassword,
     required String newPassword,
@@ -236,13 +321,15 @@ class AuthService extends ChangeNotifier {
     _setLoading(true);
     try {
       if (newPassword.length < 8) {
-        return AuthResult.failure('Nouveau mot de passe: 8 caractères minimum.');
+        return AuthResult.failure(
+            'Nouveau mot de passe: 8 caractères minimum.');
       }
 
       final email = _supabase.auth.currentUser?.email;
-      if (email == null) return AuthResult.failure('Session expirée. Reconnectez-vous.');
+      if (email == null) {
+        return AuthResult.failure('Session expirée. Reconnectez-vous.');
+      }
 
-      // Vérifier mot de passe actuel
       final verify = await _supabase.auth.signInWithPassword(
         email: email,
         password: currentPassword,
@@ -251,13 +338,14 @@ class AuthService extends ChangeNotifier {
         return AuthResult.failure('Mot de passe actuel incorrect.');
       }
 
-      // Mettre à jour
       await _supabase.auth.updateUser(UserAttributes(password: newPassword));
-      return AuthResult.success(message: 'Mot de passe modifié avec succès.');
+      return AuthResult.success(
+          message: 'Mot de passe modifié avec succès.');
     } on AuthException catch (e) {
       return AuthResult.failure(_mapAuthError(e.message));
     } catch (_) {
-      return AuthResult.failure('Erreur lors du changement de mot de passe.');
+      return AuthResult.failure(
+          'Erreur lors du changement de mot de passe.');
     } finally {
       _setLoading(false);
     }
@@ -283,7 +371,8 @@ class AuthService extends ChangeNotifier {
   // ── Storage helpers ────────────────────────────────────────────────────────
   Future<void> _saveTokens(String access, String refresh) async {
     await _secureStorage.write(key: AppConfig.keyAccessToken, value: access);
-    await _secureStorage.write(key: AppConfig.keyRefreshToken, value: refresh);
+    await _secureStorage.write(
+        key: AppConfig.keyRefreshToken, value: refresh);
   }
 
   Future<void> _saveTenant(TenantModel t) async {
@@ -305,9 +394,9 @@ class AuthService extends ChangeNotifier {
     notifyListeners();
   }
 
-  // ── Mapping erreurs Supabase → messages FR ────────────────────────────────
   String _mapAuthError(String msg) {
-    if (msg.contains('Invalid login credentials') || msg.contains('invalid_credentials')) {
+    if (msg.contains('Invalid login credentials') ||
+        msg.contains('invalid_credentials')) {
       return 'Email ou mot de passe incorrect.';
     }
     if (msg.contains('Email not confirmed')) {
@@ -335,7 +424,6 @@ class AuthService extends ChangeNotifier {
   }
 }
 
-// Résultat d'une opération d'auth
 class AuthResult {
   final bool success;
   final String? message;

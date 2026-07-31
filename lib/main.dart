@@ -1,5 +1,5 @@
 // lib/main.dart — MonMenu Manager
-// Supabase init + go_router + providers + auth guard
+// Supabase init + go_router + providers + auth guard + notifications
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
@@ -11,9 +11,11 @@ import 'config/app_config.dart';
 import 'services/auth_service.dart';
 import 'services/api_service.dart';
 import 'services/realtime_service.dart';
+import 'services/notification_service.dart';
 import 'providers/commandes_provider.dart';
 import 'providers/dashboard_provider.dart';
 import 'theme/app_theme.dart';
+import 'widgets/in_app_notification_banner.dart';
 
 // Screens
 import 'screens/auth/login_screen.dart';
@@ -36,7 +38,6 @@ import 'screens/restaurant/apparence_screen.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // ── Orientation portrait uniquement ────────────────────────────────────────
   await SystemChrome.setPreferredOrientations([
     DeviceOrientation.portraitUp,
     DeviceOrientation.portraitDown,
@@ -49,6 +50,7 @@ void main() async {
     anonKey: AppConfig.supabaseAnonKey,
     authOptions: const FlutterAuthClientOptions(
       authFlowType: AuthFlowType.pkce,
+      // FIX: persistSession = true assure la persistance de session
     ),
     realtimeClientOptions: const RealtimeClientOptions(
       logLevel: RealtimeLogLevel.info,
@@ -72,6 +74,7 @@ class _MonMenuAppState extends State<MonMenuApp> {
   late final AuthService _authService;
   late final ApiService _apiService;
   late final RealtimeService _realtimeService;
+  late final NotificationService _notificationService;
   late final CommandesProvider _commandesProvider;
   late final DashboardProvider _dashboardProvider;
   late final GoRouter _router;
@@ -82,8 +85,12 @@ class _MonMenuAppState extends State<MonMenuApp> {
     _authService = AuthService();
     _apiService = ApiService(_authService);
     _realtimeService = RealtimeService();
+    _notificationService = NotificationService();
     _commandesProvider = CommandesProvider(_apiService, _realtimeService);
     _dashboardProvider = DashboardProvider(_apiService);
+
+    // ── Initialiser les notifications au démarrage ─────────────────────────
+    _notificationService.init();
 
     // ── go_router ─────────────────────────────────────────────────────────────
     _router = GoRouter(
@@ -186,14 +193,36 @@ class _MonMenuAppState extends State<MonMenuApp> {
                   size: 48, color: AppColors.error),
               const SizedBox(height: 12),
               Text('Page introuvable: ${state.uri}'),
+              const SizedBox(height: 16),
+              ElevatedButton(
+                onPressed: () => state.uri.toString() != '/dashboard/commandes'
+                    ? null
+                    : null,
+                child: const Text('Retour'),
+              ),
             ],
           ),
         ),
       ),
     );
 
-    // Restaurer session au démarrage
-    _authService.tryRestoreSession();
+    // ── Restaurer session au démarrage ─────────────────────────────────────
+    _authService.tryRestoreSession().then((restored) {
+      if (restored) {
+        final tenant = _authService.tenant;
+        if (tenant != null) {
+          // Démarrer Realtime + notifications après restauration
+          _realtimeService.subscribe(tenant.id);
+          _notificationService.subscribe(tenant.id);
+
+          // Connecter callback commandes → provider
+          _notificationService.onNouvelleCommande =
+              (id, nomClient, montant) {
+            _commandesProvider.loadCommandes();
+          };
+        }
+      }
+    });
   }
 
   @override
@@ -203,6 +232,7 @@ class _MonMenuAppState extends State<MonMenuApp> {
         ChangeNotifierProvider.value(value: _authService),
         Provider.value(value: _apiService),
         ChangeNotifierProvider.value(value: _realtimeService),
+        ChangeNotifierProvider.value(value: _notificationService),
         ChangeNotifierProvider.value(value: _commandesProvider),
         ChangeNotifierProvider.value(value: _dashboardProvider),
       ],
@@ -212,12 +242,14 @@ class _MonMenuAppState extends State<MonMenuApp> {
         theme: AppTheme.light,
         routerConfig: _router,
         builder: (context, child) {
-          // Forcer la police system (pas de crash si Inter non disponible)
           return MediaQuery(
             data: MediaQuery.of(context).copyWith(
               textScaler: const TextScaler.linear(1.0),
             ),
-            child: child ?? const SizedBox.shrink(),
+            // FIX: Overlay pour in-app notifications au-dessus de tout
+            child: InAppNotificationOverlay(
+              child: child ?? const SizedBox.shrink(),
+            ),
           );
         },
       ),
@@ -227,8 +259,7 @@ class _MonMenuAppState extends State<MonMenuApp> {
   @override
   void dispose() {
     _realtimeService.dispose();
+    _notificationService.dispose();
     super.dispose();
   }
 }
-
-// Tous les écrans sont désormais implémentés — _PlaceholderScreen supprimé.

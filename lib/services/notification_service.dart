@@ -1,33 +1,31 @@
 // lib/services/notification_service.dart
-// Option B (Supabase Realtime) — détection de changement de statut tenant
-// Architecture prête pour FCM (hors périmètre immédiat)
+// Notifications in-app + locales avec son pour commandes et paiements
+// FIX: initialisé au démarrage dans main.dart, canal commandes + canal paiement
 import 'package:flutter/foundation.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
-/// Callback déclenché quand le statut du tenant change.
 typedef TenantStatusCallback = void Function(
     String newStatut, Map<String, dynamic> payload);
+typedef NouvelleCommandeCallback = void Function(
+    String commandeId, String nomClient, double montant);
 
-/// Service de notification basé sur Supabase Realtime.
-///
-/// Écoute les changements sur la table `tenants` pour l'ID du tenant courant.
-/// Déclenche une notification locale et notifie les listeners à chaque
-/// changement de statut (typiquement : en_attente_confirmation → actif/rejete).
-///
-/// Architecture FCM-ready : les méthodes `initFcm()` / `_handleFcmMessage()`
-/// sont documentées mais non implémentées (hors périmètre v2).
 class NotificationService extends ChangeNotifier {
   final SupabaseClient _supabase;
   final FlutterLocalNotificationsPlugin _localNotifications;
 
   RealtimeChannel? _tenantChannel;
+  RealtimeChannel? _commandesChannel;
   String? _currentTenantId;
   bool _isSubscribed = false;
 
   TenantStatusCallback? onTenantStatusChange;
+  NouvelleCommandeCallback? onNouvelleCommande;
 
   String? _lastStatut;
+
+  // In-app notification overlay callback
+  Function(String title, String body, {bool isCommande})? onShowInAppBanner;
 
   NotificationService({
     SupabaseClient? supabase,
@@ -39,10 +37,44 @@ class NotificationService extends ChangeNotifier {
   bool get isSubscribed => _isSubscribed;
   String? get lastStatut => _lastStatut;
 
-  // ── Initialisation notifications locales ──────────────────────────────────
+  // ── Initialisation ────────────────────────────────────────────────────────
 
-  /// Initialise le plugin de notifications locales.
-  Future<void> initLocalNotifications() async {
+  Future<void> init() async {
+    await _initLocalNotifications();
+  }
+
+  Future<void> _initLocalNotifications() async {
+    // Canal commandes — haute priorité + son
+    const androidCommandes = AndroidNotificationChannel(
+      'commandes_channel',
+      'Nouvelles commandes',
+      description: 'Notifications pour les nouvelles commandes reçues',
+      importance: Importance.max,
+      playSound: true,
+      enableVibration: true,
+      enableLights: true,
+    );
+
+    // Canal paiement — haute priorité + son
+    const androidPaiement = AndroidNotificationChannel(
+      'payment_channel',
+      'Paiement MonMenu',
+      description: 'Notifications de statut de paiement',
+      importance: Importance.high,
+      playSound: true,
+      enableVibration: true,
+    );
+
+    final androidPlugin = _localNotifications
+        .resolvePlatformSpecificImplementation<
+            AndroidFlutterLocalNotificationsPlugin>();
+
+    await androidPlugin?.createNotificationChannel(androidCommandes);
+    await androidPlugin?.createNotificationChannel(androidPaiement);
+
+    // Demander permission Android 13+
+    await androidPlugin?.requestNotificationsPermission();
+
     const androidSettings =
         AndroidInitializationSettings('@mipmap/ic_launcher');
     const iosSettings = DarwinInitializationSettings(
@@ -59,28 +91,35 @@ class NotificationService extends ChangeNotifier {
       settings,
       onDidReceiveNotificationResponse: _onNotificationTap,
     );
+
+    if (kDebugMode) debugPrint('[NotificationService] Initialisé');
   }
 
   void _onNotificationTap(NotificationResponse response) {
     if (kDebugMode) {
-      debugPrint('[NotificationService] Notification tapped: ${response.payload}');
+      debugPrint(
+          '[NotificationService] Notification tappée: ${response.payload}');
     }
   }
 
-  // ── Supabase Realtime — abonnement statut tenant ──────────────────────────
+  // ── Abonnement Realtime ───────────────────────────────────────────────────
 
-  /// S'abonne aux changements de la table `tenants` pour [tenantId].
-  /// Déclenche [onTenantStatusChange] et une notification locale à chaque
-  /// changement de champ `statut`.
-  void subscribeTenantStatus(String tenantId) {
+  void subscribe(String tenantId) {
     if (_currentTenantId == tenantId && _isSubscribed) return;
     _currentTenantId = tenantId;
 
-    // Désabonner l'ancien canal
+    _unsubscribeAll();
+    _subscribeTenantStatus(tenantId);
+    _subscribeCommandes(tenantId);
+
+    if (kDebugMode) debugPrint('[NotificationService] Abonné pour $tenantId');
+  }
+
+  void _subscribeTenantStatus(String tenantId) {
     _tenantChannel?.unsubscribe();
 
     _tenantChannel = _supabase
-        .channel('tenant_status_$tenantId')
+        .channel('notif_tenant_$tenantId')
         .onPostgresChanges(
           event: PostgresChangeEvent.update,
           schema: 'public',
@@ -97,11 +136,11 @@ class NotificationService extends ChangeNotifier {
             if (newStatut != null && newStatut != _lastStatut) {
               if (kDebugMode) {
                 debugPrint(
-                    '[NotificationService] Statut tenant: $_lastStatut → $newStatut');
+                    '[NotificationService] Statut: $_lastStatut → $newStatut');
               }
               _lastStatut = newStatut;
               onTenantStatusChange?.call(newStatut, newRecord);
-              _sendLocalNotification(newStatut);
+              _sendPaiementNotification(newStatut);
               notifyListeners();
             }
           },
@@ -109,14 +148,109 @@ class NotificationService extends ChangeNotifier {
         .subscribe((status, error) {
           _isSubscribed = status == RealtimeSubscribeStatus.subscribed;
           if (error != null && kDebugMode) {
-            debugPrint('[NotificationService] Realtime error: $error');
+            debugPrint('[NotificationService] Tenant error: $error');
           }
-          notifyListeners();
         });
   }
 
-  /// Envoie une notification locale selon le nouveau statut.
-  Future<void> _sendLocalNotification(String statut) async {
+  void _subscribeCommandes(String tenantId) {
+    _commandesChannel?.unsubscribe();
+
+    _commandesChannel = _supabase
+        .channel('notif_commandes_$tenantId')
+        .onPostgresChanges(
+          event: PostgresChangeEvent.insert,
+          schema: 'public',
+          table: 'commandes',
+          filter: PostgresChangeFilter(
+            type: PostgresChangeFilterType.eq,
+            column: 'tenant_id',
+            value: tenantId,
+          ),
+          callback: (payload) {
+            final record = payload.newRecord;
+            final commandeId = record['id'] as String? ?? '';
+            final nomClient =
+                record['nom_client'] as String? ?? 'Client inconnu';
+            final montant =
+                (record['montant_total'] as num?)?.toDouble() ?? 0.0;
+            final numero = record['numero_commande'] as String?;
+
+            onNouvelleCommande?.call(commandeId, nomClient, montant);
+
+            // Notification locale avec son
+            _sendCommandeNotification(
+              commandeId: commandeId,
+              nomClient: nomClient,
+              montant: montant,
+              numero: numero,
+            );
+
+            // In-app banner
+            onShowInAppBanner?.call(
+              '🛒 Nouvelle commande !',
+              '$nomClient — ${_formatMontant(montant)}',
+              isCommande: true,
+            );
+
+            notifyListeners();
+          },
+        )
+        .subscribe((status, error) {
+          if (error != null && kDebugMode) {
+            debugPrint('[NotificationService] Commandes error: $error');
+          }
+        });
+  }
+
+  // ── Envoi notifications locales ───────────────────────────────────────────
+
+  Future<void> _sendCommandeNotification({
+    required String commandeId,
+    required String nomClient,
+    required double montant,
+    String? numero,
+  }) async {
+    final titre = numero != null
+        ? '🛒 Commande #$numero'
+        : '🛒 Nouvelle commande !';
+    final corps = '$nomClient — ${_formatMontant(montant)}';
+
+    const androidDetails = AndroidNotificationDetails(
+      'commandes_channel',
+      'Nouvelles commandes',
+      channelDescription: 'Notifications pour les nouvelles commandes reçues',
+      importance: Importance.max,
+      priority: Priority.high,
+      playSound: true,
+      enableVibration: true,
+      enableLights: true,
+      icon: '@mipmap/ic_launcher',
+      // Son par défaut du système (le plus fort)
+      sound: RawResourceAndroidNotificationSound('notification'),
+      category: AndroidNotificationCategory.message,
+      fullScreenIntent: true,
+    );
+    const iosDetails = DarwinNotificationDetails(
+      presentAlert: true,
+      presentBadge: true,
+      presentSound: true,
+    );
+    const details = NotificationDetails(
+      android: androidDetails,
+      iOS: iosDetails,
+    );
+
+    await _localNotifications.show(
+      commandeId.hashCode % 9999,
+      titre,
+      corps,
+      details,
+      payload: 'commande:$commandeId',
+    );
+  }
+
+  Future<void> _sendPaiementNotification(String statut) async {
     String title;
     String body;
 
@@ -128,16 +262,18 @@ class NotificationService extends ChangeNotifier {
       case 'rejete':
         title = '❌ Preuve de paiement rejetée';
         body =
-            'Votre preuve de paiement a été rejetée. Veuillez soumettre une nouvelle preuve.';
+            'Votre preuve de paiement a été rejetée. Veuillez en soumettre une nouvelle.';
         break;
       case 'en_attente_confirmation':
         title = '⏳ Preuve reçue';
-        body =
-            'Votre preuve de paiement a été reçue. Confirmation sous 38h.';
+        body = 'Votre preuve de paiement a été reçue. Confirmation sous 38h.';
         break;
       default:
-        return; // Pas de notification pour les autres statuts
+        return;
     }
+
+    // In-app banner
+    onShowInAppBanner?.call(title, body);
 
     const androidDetails = AndroidNotificationDetails(
       'payment_channel',
@@ -145,6 +281,7 @@ class NotificationService extends ChangeNotifier {
       channelDescription: 'Notifications de statut de paiement',
       importance: Importance.high,
       priority: Priority.high,
+      playSound: true,
       icon: '@mipmap/ic_launcher',
     );
     const iosDetails = DarwinNotificationDetails(
@@ -168,36 +305,36 @@ class NotificationService extends ChangeNotifier {
 
   int _notificationIdForStatut(String statut) {
     switch (statut) {
-      case 'actif': return 1001;
-      case 'rejete': return 1002;
-      case 'en_attente_confirmation': return 1003;
-      default: return 1000;
+      case 'actif':
+        return 1001;
+      case 'rejete':
+        return 1002;
+      case 'en_attente_confirmation':
+        return 1003;
+      default:
+        return 1000;
     }
+  }
+
+  String _formatMontant(double montant) {
+    return '${montant.toStringAsFixed(0)} FCFA';
   }
 
   // ── Désabonnement ─────────────────────────────────────────────────────────
 
-  void unsubscribe() {
+  void _unsubscribeAll() {
     _tenantChannel?.unsubscribe();
+    _commandesChannel?.unsubscribe();
     _tenantChannel = null;
+    _commandesChannel = null;
     _isSubscribed = false;
+  }
+
+  void unsubscribe() {
+    _unsubscribeAll();
     _currentTenantId = null;
     notifyListeners();
   }
-
-  // ── Architecture FCM-ready (non implémenté dans v2) ───────────────────────
-  //
-  // Pour implémenter FCM :
-  // 1. Ajouter firebase_messaging: ^15.x.x dans pubspec.yaml
-  // 2. Configurer google-services.json (Android) et GoogleService-Info.plist (iOS)
-  // 3. Implémenter initFcm() :
-  //    - FirebaseMessaging.instance.requestPermission()
-  //    - FirebaseMessaging.instance.getToken() → envoyer au backend
-  //    - FirebaseMessaging.onMessage.listen(_handleFcmMessage)
-  //    - FirebaseMessaging.onMessageOpenedApp.listen(_handleFcmMessage)
-  // 4. Backend : appel à FCM Admin SDK lors du changement de statut tenant
-  //    (déclenché dans le webhook Supabase ou la fonction Cloudflare)
-  // IMPORTANT : ne jamais committer les clés FCM en clair dans le code
 
   @override
   void dispose() {

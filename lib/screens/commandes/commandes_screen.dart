@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import '../../providers/commandes_provider.dart';
+import '../../services/auth_service.dart';
+import '../../services/notification_service.dart';
 import '../../services/realtime_service.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/app_drawer.dart';
@@ -22,6 +24,22 @@ class _CommandesScreenState extends State<CommandesScreen> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      final auth = context.read<AuthService>();
+      final tenant = auth.tenant;
+
+      // Démarrer Realtime si pas encore abonné
+      if (tenant != null) {
+        final realtime = context.read<RealtimeService>();
+        realtime.subscribe(tenant.id);
+
+        // Démarrer notifications
+        final notif = context.read<NotificationService>();
+        notif.subscribe(tenant.id);
+        notif.onNouvelleCommande = (id, nomClient, montant) {
+          context.read<CommandesProvider>().loadCommandes();
+        };
+      }
+
       context.read<CommandesProvider>().loadCommandes();
     });
   }

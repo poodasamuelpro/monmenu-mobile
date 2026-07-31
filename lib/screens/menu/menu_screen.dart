@@ -1,6 +1,7 @@
 // lib/screens/menu/menu_screen.dart
 // Menu complet — CRUD catégories + produits, toggle disponibilité
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import '../../models/produit_model.dart';
 import '../../services/api_service.dart';
@@ -191,6 +192,11 @@ class _MenuScreenState extends State<MenuScreen> with SingleTickerProviderStateM
         foregroundColor: AppColors.gray900,
         elevation: 0,
         surfaceTintColor: Colors.transparent,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_rounded),
+          onPressed: () => context.canPop() ? context.pop() : context.go('/dashboard/commandes'),
+          tooltip: 'Retour',
+        ),
         bottom: _buildTabBar(),
         actions: [
           IconButton(

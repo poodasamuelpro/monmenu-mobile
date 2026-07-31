@@ -3,6 +3,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -67,8 +68,7 @@ class _PlansScreenState extends State<PlansScreen> {
           IconButton(
             icon: const Icon(Icons.history_rounded),
             tooltip: 'Historique',
-            onPressed: () => Navigator.pushNamed(
-                context, '/dashboard/plans/historique'),
+            onPressed: () => context.go('/dashboard/plans/historique'),
           ),
         ],
       ),

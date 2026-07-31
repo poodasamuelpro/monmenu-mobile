@@ -1,6 +1,7 @@
 // lib/screens/restaurant/codes_promo_screen.dart
 // Codes promotionnels — liste, création, toggle actif, suppression
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import '../../models/livreur_model.dart';
 import '../../services/api_service.dart';
@@ -105,9 +106,14 @@ class _CodesPromoScreenState extends State<CodesPromoScreen> {
         foregroundColor: AppColors.gray900,
         elevation: 0,
         surfaceTintColor: Colors.transparent,
-        bottom: PreferredSize(
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_rounded),
+          onPressed: () => context.canPop() ? context.pop() : context.go('/dashboard/commandes'),
+          tooltip: 'Retour',
+        ),
+        bottom: const PreferredSize(
           preferredSize: Size.fromHeight(1),
-          child: const Divider(height: 1, color: AppColors.gray200),
+          child: Divider(height: 1, color: AppColors.gray200),
         ),
         actions: [
           IconButton(

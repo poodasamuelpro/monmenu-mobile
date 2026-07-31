@@ -1,9 +1,11 @@
 // lib/screens/restaurant/apparence_screen.dart
 // Apparence restaurant — couleur primaire, logo, bannière
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../services/api_service.dart';
+import '../../services/auth_service.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/loading_widget.dart';
 
@@ -49,6 +51,18 @@ class _ApparenceScreenState extends State<ApparenceScreen> {
   Future<void> _loadApparence() async {
     setState(() { _isLoading = true; _error = null; });
     final api = context.read<ApiService>();
+    final auth = context.read<AuthService>();
+    final tenant = auth.tenant;
+
+    // Fallback immédiat depuis le cache tenant
+    if (tenant != null) {
+      if (tenant.couleurPrimaire != null) {
+        final c = _hexToColor(tenant.couleurPrimaire!);
+        if (c != null) _couleurPrimaire = c;
+      }
+      _logoUrl = tenant.logoUrl;
+      _nomRestaurant = tenant.nom;
+    }
 
     // Charger les infos depuis /dashboard/pdv ou /dashboard/profil
     final resp = await api.getPdv();
@@ -227,9 +241,14 @@ class _ApparenceScreenState extends State<ApparenceScreen> {
         foregroundColor: AppColors.gray900,
         elevation: 0,
         surfaceTintColor: Colors.transparent,
-        bottom: PreferredSize(
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_rounded),
+          onPressed: () => context.canPop() ? context.pop() : context.go('/dashboard/commandes'),
+          tooltip: 'Retour',
+        ),
+        bottom: const PreferredSize(
           preferredSize: Size.fromHeight(1),
-          child: const Divider(height: 1, color: AppColors.gray200),
+          child: Divider(height: 1, color: AppColors.gray200),
         ),
       ),
       body: _buildBody(),

@@ -2,10 +2,12 @@
 // QR Code restaurant — affichage, partage, instructions client
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../services/api_service.dart';
+import '../../services/auth_service.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/loading_widget.dart';
 
@@ -32,6 +34,18 @@ class _QrCodeScreenState extends State<QrCodeScreen> {
   Future<void> _loadQrCode() async {
     setState(() { _isLoading = true; _error = null; });
     final api = context.read<ApiService>();
+    final auth = context.read<AuthService>();
+    final tenant = auth.tenant;
+
+    // Fallback immédiat depuis les données tenant en cache
+    if (tenant != null && tenant.slug.isNotEmpty) {
+      final urlFromCache = 'https://monmenu.app/${tenant.slug}';
+      setState(() {
+        _boutiqueUrl = urlFromCache;
+        _qrData = urlFromCache;
+        _nomRestaurant = tenant.nom;
+      });
+    }
 
     // Récupérer les infos QR via /dashboard/qrcode
     final resp = await api.getQrCode();
@@ -42,9 +56,10 @@ class _QrCodeScreenState extends State<QrCodeScreen> {
       setState(() {
         _qrData = data['qr_url'] as String? ??
             data['boutique_url'] as String? ??
-            data['url'] as String?;
+            data['url'] as String? ??
+            _qrData;
         _boutiqueUrl = data['boutique_url'] as String? ?? _qrData;
-        _nomRestaurant = data['nom'] as String? ?? 'Mon Restaurant';
+        _nomRestaurant = data['nom'] as String? ?? _nomRestaurant ?? 'Mon Restaurant';
         _isLoading = false;
       });
     } else {
@@ -56,18 +71,22 @@ class _QrCodeScreenState extends State<QrCodeScreen> {
         final pdv = pdvList?.isNotEmpty == true
             ? pdvList!.first as Map<String, dynamic>
             : <String, dynamic>{};
-        final slug = pdv['slug'] as String? ?? '';
+        final slug = pdv['slug'] as String? ?? tenant?.slug ?? '';
         setState(() {
           _boutiqueUrl = slug.isNotEmpty
-              ? 'https://monmenu.app/boutique/$slug'
-              : null;
+              ? 'https://monmenu.app/$slug'
+              : _boutiqueUrl;
           _qrData = _boutiqueUrl;
-          _nomRestaurant = pdv['nom'] as String? ?? 'Mon Restaurant';
+          _nomRestaurant = pdv['nom'] as String? ?? _nomRestaurant ?? 'Mon Restaurant';
           _isLoading = false;
-          if (_qrData == null) _error = resp.error ?? 'QR Code indisponible';
+          if (_qrData == null) _error = 'QR Code indisponible';
         });
       } else {
-        setState(() { _error = resp.error; _isLoading = false; });
+        setState(() {
+          // Garder le fallback du cache si dispo
+          if (_qrData == null) _error = resp.error;
+          _isLoading = false;
+        });
       }
     }
   }
@@ -113,9 +132,14 @@ class _QrCodeScreenState extends State<QrCodeScreen> {
         foregroundColor: AppColors.gray900,
         elevation: 0,
         surfaceTintColor: Colors.transparent,
-        bottom: PreferredSize(
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_rounded),
+          onPressed: () => context.canPop() ? context.pop() : context.go('/dashboard/commandes'),
+          tooltip: 'Retour',
+        ),
+        bottom: const PreferredSize(
           preferredSize: Size.fromHeight(1),
-          child: const Divider(height: 1, color: AppColors.gray200),
+          child: Divider(height: 1, color: AppColors.gray200),
         ),
         actions: [
           IconButton(

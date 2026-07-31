@@ -1,6 +1,7 @@
 // lib/screens/plans/abonnement_historique_screen.dart
 // Historique paginé des abonnements — GET /paiement/historique
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import '../../models/plan_model.dart';
 import '../../services/api_service.dart';
@@ -97,7 +98,14 @@ class _AbonnementHistoriqueScreenState
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.background,
-      appBar: AppBar(title: const Text('Historique des abonnements')),
+      appBar: AppBar(
+        title: const Text('Historique des abonnements'),
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_rounded),
+          onPressed: () => context.canPop() ? context.pop() : context.go('/dashboard/plans'),
+          tooltip: 'Retour',
+        ),
+      ),
       body: RefreshIndicator(
         color: AppColors.primary,
         onRefresh: _refresh,
