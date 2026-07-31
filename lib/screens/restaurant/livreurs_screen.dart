@@ -1,8 +1,10 @@
 // lib/screens/restaurant/livreurs_screen.dart
 // Gestion complète des livreurs — liste, ajout, édition, toggle actif
+// SYNC API : POST/PATCH /dashboard/livreurs → champs: nom, whatsapp_number, actif
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../models/livreur_model.dart';
 import '../../services/api_service.dart';
 import '../../theme/app_theme.dart';
@@ -43,12 +45,22 @@ class _LivreursScreenState extends State<LivreursScreen> {
 
   Future<void> _toggleActif(LivreurModel l) async {
     final api = context.read<ApiService>();
+    // API attend: actif (bool ou 0/1)
     final resp = await api.updateLivreur(l.id, {'actif': !l.actif});
     if (!mounted) return;
     if (resp.success) {
       _loadLivreurs();
     } else {
       _showSnack(resp.error ?? 'Erreur', isError: true);
+    }
+  }
+
+  Future<void> _openWhatsApp(String whatsapp) async {
+    final clean = whatsapp.replaceAll(RegExp(r'[\s\-\(\)]'), '');
+    final numero = clean.startsWith('+') ? clean.substring(1) : clean;
+    final uri = Uri.parse('https://wa.me/$numero');
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
     }
   }
 
@@ -152,6 +164,9 @@ class _LivreursScreenState extends State<LivreursScreen> {
           onEdit: () => _showLivreurDialog(livreur: _livreurs[i]),
           onToggle: () => _toggleActif(_livreurs[i]),
           onDelete: () => _confirmDelete(_livreurs[i]),
+          onWhatsApp: _livreurs[i].whatsappNumber != null
+              ? () => _openWhatsApp(_livreurs[i].whatsappNumber!)
+              : null,
         ),
       ),
     );
@@ -188,12 +203,14 @@ class _LivreurCard extends StatelessWidget {
   final VoidCallback onEdit;
   final VoidCallback onToggle;
   final VoidCallback onDelete;
+  final VoidCallback? onWhatsApp;
 
   const _LivreurCard({
     required this.livreur,
     required this.onEdit,
     required this.onToggle,
     required this.onDelete,
+    this.onWhatsApp,
   });
 
   @override
@@ -209,86 +226,93 @@ class _LivreurCard extends StatelessWidget {
       ),
       child: Padding(
         padding: const EdgeInsets.all(16),
-        child: Row(children: [
-          // Avatar
-          Container(
-            width: 48, height: 48,
-            decoration: BoxDecoration(
-              color: livreur.actif ? AppColors.primary.withValues(alpha: 0.1) : AppColors.gray100,
-              shape: BoxShape.circle,
+        child: Column(children: [
+          Row(children: [
+            // Avatar
+            Container(
+              width: 48, height: 48,
+              decoration: BoxDecoration(
+                color: livreur.actif ? AppColors.primary.withValues(alpha: 0.1) : AppColors.gray100,
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                Icons.delivery_dining_rounded,
+                color: livreur.actif ? AppColors.primary : AppColors.gray400,
+                size: 24,
+              ),
             ),
-            child: Icon(
-              Icons.delivery_dining_rounded,
-              color: livreur.actif ? AppColors.primary : AppColors.gray400,
-              size: 24,
-            ),
-          ),
-          const SizedBox(width: 12),
+            const SizedBox(width: 12),
 
-          // Info
-          Expanded(child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(children: [
-                Expanded(
-                  child: Text(
-                    livreur.nom,
-                    style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15, color: AppColors.gray900),
-                    maxLines: 1, overflow: TextOverflow.ellipsis,
+            // Info
+            Expanded(child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(children: [
+                  Expanded(
+                    child: Text(
+                      livreur.nom,
+                      style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15, color: AppColors.gray900),
+                      maxLines: 1, overflow: TextOverflow.ellipsis,
+                    ),
                   ),
-                ),
-                _StatusBadge(actif: livreur.actif),
-              ]),
-              if (livreur.telephone != null) ...[
-                const SizedBox(height: 4),
-                Row(children: [
-                  const Icon(Icons.phone_rounded, size: 13, color: AppColors.gray400),
-                  const SizedBox(width: 4),
-                  Text(livreur.telephone!, style: const TextStyle(fontSize: 13, color: AppColors.gray500)),
+                  _StatusBadge(actif: livreur.actif),
                 ]),
+                if (livreur.whatsappNumber != null) ...[
+                  const SizedBox(height: 4),
+                  Row(children: [
+                    const Icon(Icons.phone_rounded, size: 13, color: AppColors.gray400),
+                    const SizedBox(width: 4),
+                    Text(livreur.whatsappNumber!, style: const TextStyle(fontSize: 13, color: AppColors.gray500)),
+                  ]),
+                ],
               ],
-              if (livreur.email != null) ...[
-                const SizedBox(height: 2),
-                Row(children: [
-                  const Icon(Icons.email_rounded, size: 13, color: AppColors.gray400),
-                  const SizedBox(width: 4),
-                  Text(livreur.email!, style: const TextStyle(fontSize: 13, color: AppColors.gray500)),
-                ]),
-              ],
-              const SizedBox(height: 6),
-              Row(children: [
-                _StatChip(icon: Icons.pending_actions_rounded, label: '${livreur.commandesEnCours} en cours', color: AppColors.warning),
-                const SizedBox(width: 8),
-                _StatChip(icon: Icons.check_circle_rounded, label: '${livreur.totalCommandes} total', color: AppColors.success),
-              ]),
-            ],
-          )),
+            )),
 
-          // Actions
-          Column(children: [
-            Switch(
-              value: livreur.actif,
-              onChanged: (_) => onToggle(),
-              activeThumbColor: Colors.white,
-              activeTrackColor: AppColors.success,
-            ),
-            Row(mainAxisSize: MainAxisSize.min, children: [
-              IconButton(
-                icon: const Icon(Icons.edit_rounded, size: 18),
-                onPressed: onEdit,
-                color: AppColors.primary,
-                tooltip: 'Modifier',
-                constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+            // Actions
+            Column(children: [
+              Switch(
+                value: livreur.actif,
+                onChanged: (_) => onToggle(),
+                activeThumbColor: Colors.white,
+                activeTrackColor: AppColors.success,
               ),
-              IconButton(
-                icon: const Icon(Icons.delete_outline_rounded, size: 18),
-                onPressed: onDelete,
-                color: AppColors.error,
-                tooltip: 'Supprimer',
-                constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-              ),
+              Row(mainAxisSize: MainAxisSize.min, children: [
+                IconButton(
+                  icon: const Icon(Icons.edit_rounded, size: 18),
+                  onPressed: onEdit,
+                  color: AppColors.primary,
+                  tooltip: 'Modifier',
+                  constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.delete_outline_rounded, size: 18),
+                  onPressed: onDelete,
+                  color: AppColors.error,
+                  tooltip: 'Supprimer',
+                  constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                ),
+              ]),
             ]),
           ]),
+
+          // Bouton WhatsApp livreur
+          if (onWhatsApp != null) ...[
+            const SizedBox(height: 10),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: onWhatsApp,
+                icon: const Icon(Icons.chat_rounded, size: 14),
+                label: const Text('Contacter sur WhatsApp', style: TextStyle(fontSize: 12)),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: const Color(0xFF25D366),
+                  side: const BorderSide(color: Color(0xFF25D366)),
+                  padding: const EdgeInsets.symmetric(vertical: 8),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                ),
+              ),
+            ),
+          ],
         ]),
       ),
     );
@@ -318,24 +342,9 @@ class _StatusBadge extends StatelessWidget {
   }
 }
 
-class _StatChip extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final Color color;
-
-  const _StatChip({required this.icon, required this.label, required this.color});
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(mainAxisSize: MainAxisSize.min, children: [
-      Icon(icon, size: 12, color: color),
-      const SizedBox(width: 3),
-      Text(label, style: TextStyle(fontSize: 11, color: color, fontWeight: FontWeight.w500)),
-    ]);
-  }
-}
-
 // ── Dialog ajout / édition ────────────────────────────────────────────────────
+// API POST /dashboard/livreurs : { nom, whatsapp_number }
+// API PATCH /dashboard/livreurs/:id : { nom?, whatsapp_number?, actif? }
 class _LivreurDialog extends StatefulWidget {
   final LivreurModel? livreur;
   final VoidCallback onSaved;
@@ -349,8 +358,7 @@ class _LivreurDialog extends StatefulWidget {
 class _LivreurDialogState extends State<_LivreurDialog> {
   final _formKey = GlobalKey<FormState>();
   late final TextEditingController _nomCtrl;
-  late final TextEditingController _telCtrl;
-  late final TextEditingController _emailCtrl;
+  late final TextEditingController _whatsappCtrl;
   bool _actif = true;
   bool _isLoading = false;
 
@@ -360,14 +368,14 @@ class _LivreurDialogState extends State<_LivreurDialog> {
   void initState() {
     super.initState();
     _nomCtrl = TextEditingController(text: widget.livreur?.nom ?? '');
-    _telCtrl = TextEditingController(text: widget.livreur?.telephone ?? '');
-    _emailCtrl = TextEditingController(text: widget.livreur?.email ?? '');
+    _whatsappCtrl = TextEditingController(text: widget.livreur?.whatsappNumber ?? '');
     _actif = widget.livreur?.actif ?? true;
   }
 
   @override
   void dispose() {
-    _nomCtrl.dispose(); _telCtrl.dispose(); _emailCtrl.dispose();
+    _nomCtrl.dispose();
+    _whatsappCtrl.dispose();
     super.dispose();
   }
 
@@ -376,11 +384,11 @@ class _LivreurDialogState extends State<_LivreurDialog> {
     setState(() => _isLoading = true);
 
     final api = context.read<ApiService>();
-    final payload = {
+    // API: nom (requis) + whatsapp_number (requis à la création)
+    final payload = <String, dynamic>{
       'nom': _nomCtrl.text.trim(),
-      if (_telCtrl.text.trim().isNotEmpty) 'telephone': _telCtrl.text.trim(),
-      if (_emailCtrl.text.trim().isNotEmpty) 'email': _emailCtrl.text.trim(),
-      'actif': _actif,
+      'whatsapp_number': _whatsappCtrl.text.trim(),
+      if (_isEdit) 'actif': _actif,
     };
 
     ApiResponse resp;
@@ -414,24 +422,49 @@ class _LivreurDialogState extends State<_LivreurDialog> {
         child: Form(
           key: _formKey,
           child: Column(mainAxisSize: MainAxisSize.min, children: [
-            _field(_nomCtrl, 'Nom complet *', Icons.person_rounded,
-              validator: (v) => (v == null || v.trim().isEmpty) ? 'Nom requis' : null,
+            // Nom
+            TextFormField(
+              controller: _nomCtrl,
+              decoration: InputDecoration(
+                labelText: 'Nom complet *',
+                prefixIcon: const Icon(Icons.person_rounded, size: 18, color: AppColors.gray400),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+              ),
+              validator: (v) => (v == null || v.trim().length < 2) ? 'Nom requis (2 caractères min)' : null,
             ),
             const SizedBox(height: 12),
-            _field(_telCtrl, 'Téléphone', Icons.phone_rounded),
-            const SizedBox(height: 12),
-            _field(_emailCtrl, 'Email', Icons.email_rounded,
-              keyboardType: TextInputType.emailAddress,
+
+            // WhatsApp
+            TextFormField(
+              controller: _whatsappCtrl,
+              keyboardType: TextInputType.phone,
+              decoration: InputDecoration(
+                labelText: 'Numéro WhatsApp *',
+                hintText: '+22612345678',
+                prefixIcon: const Icon(Icons.chat_rounded, size: 18, color: AppColors.gray400),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+              ),
+              validator: (v) {
+                if (v == null || v.trim().isEmpty) return 'Numéro WhatsApp requis';
+                final clean = v.replaceAll(RegExp(r'[\s\-]'), '');
+                if (clean.length < 8) return 'Numéro invalide (min 8 chiffres)';
+                return null;
+              },
             ),
-            const SizedBox(height: 12),
-            SwitchListTile(
-              title: const Text('Actif', style: TextStyle(fontSize: 14)),
-              value: _actif,
-              onChanged: (v) => setState(() => _actif = v),
-              activeThumbColor: Colors.white,
-              activeTrackColor: AppColors.success,
-              contentPadding: EdgeInsets.zero,
-            ),
+
+            if (_isEdit) ...[
+              const SizedBox(height: 8),
+              SwitchListTile(
+                title: const Text('Actif', style: TextStyle(fontSize: 14)),
+                value: _actif,
+                onChanged: (v) => setState(() => _actif = v),
+                activeThumbColor: Colors.white,
+                activeTrackColor: AppColors.success,
+                contentPadding: EdgeInsets.zero,
+              ),
+            ],
           ]),
         ),
       ),
@@ -451,26 +484,6 @@ class _LivreurDialogState extends State<_LivreurDialog> {
               : Text(_isEdit ? 'Modifier' : 'Ajouter'),
         ),
       ],
-    );
-  }
-
-  Widget _field(
-    TextEditingController ctrl,
-    String label,
-    IconData icon, {
-    TextInputType? keyboardType,
-    String? Function(String?)? validator,
-  }) {
-    return TextFormField(
-      controller: ctrl,
-      keyboardType: keyboardType,
-      validator: validator,
-      decoration: InputDecoration(
-        labelText: label,
-        prefixIcon: Icon(icon, size: 18, color: AppColors.gray400),
-        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-      ),
     );
   }
 }

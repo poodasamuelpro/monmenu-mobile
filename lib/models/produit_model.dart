@@ -42,7 +42,8 @@ class ProduitModel {
       nom: json['nom'] as String? ?? '',
       description: json['description'] as String?,
       prix: _toDouble(json['prix']),
-      imageUrl: json['image_url'] as String?,
+      // API retourne 'photo_url' (pas 'image_url')
+      imageUrl: (json['photo_url'] ?? json['image_url']) as String?,
       actif: json['actif'] as bool? ?? true,
       disponible: json['disponible'] as bool? ?? true,
       ordreAffichage: (json['ordre_affichage'] as num?)?.toInt(),
@@ -66,7 +67,7 @@ class ProduitModel {
     'nom': nom,
     'description': description,
     'prix': prix,
-    'image_url': imageUrl,
+    'photo_url': imageUrl, // Champ API correct
     'actif': actif,
     'disponible': disponible,
     'ordre_affichage': ordreAffichage,

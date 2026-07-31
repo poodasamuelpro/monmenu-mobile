@@ -161,9 +161,9 @@ class _CommandesScreenState extends State<CommandesScreen> {
   }
 
   Future<void> _updateStatut(String id, String newStatut) async {
-    final success = await context.read<CommandesProvider>()
+    final result = await context.read<CommandesProvider>()
         .updateStatut(id, newStatut);
-    if (!success && mounted) {
+    if (!result.success && mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Erreur lors de la mise à jour du statut'),

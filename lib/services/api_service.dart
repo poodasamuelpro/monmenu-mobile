@@ -123,8 +123,18 @@ class ApiService {
   }
 
   /// PATCH /dashboard/commandes/:id/statut
-  Future<ApiResponse> updateCommandeStatut(String id, String statut) async {
-    return patch('/dashboard/commandes/$id/statut', {'statut': statut});
+  /// [livreurId] — si fourni ET statut == 'en_preparation', déclenche la notif WhatsApp livreur
+  /// Retourne lien_whatsapp_livreur dans resp.data si livreur notifié
+  Future<ApiResponse> updateCommandeStatut(
+    String id,
+    String statut, {
+    String? livreurId,
+    String? note,
+  }) async {
+    final body = <String, dynamic>{'statut': statut};
+    if (livreurId != null && livreurId.isNotEmpty) body['livreur_id'] = livreurId;
+    if (note != null && note.isNotEmpty) body['note'] = note;
+    return patch('/dashboard/commandes/$id/statut', body);
   }
 
   /// GET /dashboard/stats
@@ -295,6 +305,85 @@ class ApiService {
       if (kDebugMode) debugPrint('[ApiService] soumettrePreuve error: $e');
       return ApiResponse.failure(0, 'Erreur lors de l\'upload.');
     }
+  }
+
+  // ── Upload image ───────────────────────────────────────────────────────────
+
+  /// POST /dashboard/upload-image — Upload vers R2 (multipart/form-data)
+  /// Champ: file (File image — jpeg/png/webp/gif, max 5MB)
+  /// Retourne: { success, url, key } — url = URL publique via /dashboard/media/:key
+  /// SEC-02: token jamais loggé
+  Future<ApiResponse> uploadImage(String filePath) async {
+    try {
+      final token = _authService.accessToken;
+      if (token == null || token.length < AppConfig.tokenMinLength) {
+        return ApiResponse.failure(401, 'Token manquant. Reconnectez-vous.');
+      }
+
+      final uri = _buildUri('/dashboard/upload-image');
+      final request = http.MultipartRequest('POST', uri);
+
+      request.headers['Authorization'] = 'Bearer $token';
+      request.headers['Accept'] = 'application/json';
+
+      final file = File(filePath);
+      if (!file.existsSync()) {
+        return ApiResponse.failure(0, 'Fichier image introuvable.');
+      }
+
+      final ext = filePath.split('.').last.toLowerCase();
+
+      final fileBytes = await file.readAsBytes();
+      final multipartFile = http.MultipartFile.fromBytes(
+        'file',
+        fileBytes,
+        filename: 'image.$ext',
+      );
+      request.files.add(multipartFile);
+
+      final streamedResponse = await request.send()
+          .timeout(const Duration(seconds: 60));
+      final response = await http.Response.fromStream(streamedResponse);
+
+      if (kDebugMode) {
+        debugPrint('[ApiService] uploadImage status=${response.statusCode}');
+      }
+
+      return _parseResponse(response);
+    } on SocketException {
+      return ApiResponse.failure(0, 'Pas de connexion internet.');
+    } on TimeoutException {
+      return ApiResponse.failure(0, 'Délai d\'upload dépassé. Réessayez.');
+    } catch (e) {
+      if (kDebugMode) debugPrint('[ApiService] uploadImage error: $e');
+      return ApiResponse.failure(0, 'Erreur lors de l\'upload image.');
+    }
+  }
+
+  // ── Notifications restaurant ───────────────────────────────────────────────
+
+  /// GET /dashboard/notifications/liste?page=&limit=&non_lues=
+  /// Retourne: { notifications[], page, limit, total, nb_non_lues, has_more }
+  /// Table Supabase: notifications_restaurant (id, tenant_id, type, titre, message, lue, lien, created_at)
+  Future<ApiResponse> getNotificationsListe({
+    int page = 1,
+    int limit = 10,
+    bool nonLuesSeulement = false,
+  }) async {
+    String ep = '/dashboard/notifications/liste?page=$page&limit=$limit';
+    if (nonLuesSeulement) ep += '&non_lues=true';
+    return get(ep);
+  }
+
+  /// PATCH /dashboard/notifications/:id — Marquer comme lue/non lue
+  /// Body: { lue: bool }
+  Future<ApiResponse> marquerNotificationLue(String id, {bool lue = true}) async {
+    return patch('/dashboard/notifications/$id', {'lue': lue});
+  }
+
+  /// PATCH /dashboard/notifications/tout-lire — Marquer toutes comme lues
+  Future<ApiResponse> marquerToutesLues() async {
+    return patch('/dashboard/notifications/tout-lire', {});
   }
 
   /// GET /paiement/historique?page=&limit=

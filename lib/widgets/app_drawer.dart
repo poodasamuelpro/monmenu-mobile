@@ -139,6 +139,12 @@ class AppDrawer extends StatelessWidget {
                     badge: showPaymentBadge,
                   ),
                   _NavItem(
+                    icon: Icons.notifications_rounded,
+                    label: 'Notifications',
+                    route: '/dashboard/notifications',
+                    currentRoute: route,
+                  ),
+                  _NavItem(
                     icon: Icons.settings_rounded,
                     label: 'Paramètres',
                     route: '/dashboard/settings',

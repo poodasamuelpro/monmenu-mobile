@@ -1,7 +1,13 @@
 // lib/screens/menu/menu_screen.dart
 // Menu complet — CRUD catégories + produits, toggle disponibilité
+// Image upload : POST /dashboard/upload-image (multipart/form-data, champ 'file')
+// Produit API: photo_url (pas image_url)
+import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter_image_compress/flutter_image_compress.dart';
 import 'package:go_router/go_router.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
 import '../../models/produit_model.dart';
 import '../../services/api_service.dart';
@@ -576,6 +582,8 @@ class _CategorieDialogState extends State<_CategorieDialog> {
 }
 
 // ── Dialog produit ─────────────────────────────────────────────────────────────
+// Upload image via POST /dashboard/upload-image (multipart, champ 'file')
+// API produit: photo_url (champ correct côté Supabase/API)
 class _ProduitDialog extends StatefulWidget {
   final ProduitModel? produit;
   final String? categorieId;
@@ -592,10 +600,15 @@ class _ProduitDialogState extends State<_ProduitDialog> {
   late final TextEditingController _nomCtrl;
   late final TextEditingController _descCtrl;
   late final TextEditingController _prixCtrl;
-  late final TextEditingController _imageCtrl;
   late String? _selectedCategorieId;
   bool _disponible = true;
   bool _isLoading = false;
+  bool _isUploadingImage = false;
+
+  // Image — URL actuelle (existante ou uploadée)
+  String? _photoUrl;
+  // Image locale sélectionnée (à uploader)
+  XFile? _selectedImage;
 
   bool get _isEdit => widget.produit != null;
 
@@ -605,37 +618,138 @@ class _ProduitDialogState extends State<_ProduitDialog> {
     _nomCtrl = TextEditingController(text: widget.produit?.nom ?? '');
     _descCtrl = TextEditingController(text: widget.produit?.description ?? '');
     _prixCtrl = TextEditingController(text: widget.produit?.prix.toStringAsFixed(0) ?? '');
-    _imageCtrl = TextEditingController(text: widget.produit?.imageUrl ?? '');
     _selectedCategorieId = widget.produit?.categorieId ?? widget.categorieId ??
         (widget.categories.isNotEmpty ? widget.categories.first.id : null);
     _disponible = widget.produit?.disponible ?? true;
+    _photoUrl = widget.produit?.imageUrl;
   }
 
   @override
-  void dispose() { _nomCtrl.dispose(); _descCtrl.dispose(); _prixCtrl.dispose(); _imageCtrl.dispose(); super.dispose(); }
+  void dispose() {
+    _nomCtrl.dispose();
+    _descCtrl.dispose();
+    _prixCtrl.dispose();
+    super.dispose();
+  }
+
+  // ── Sélectionner une image depuis la galerie ──────────────────────────────
+  Future<void> _pickImage() async {
+    try {
+      final picker = ImagePicker();
+      final picked = await picker.pickImage(
+        source: ImageSource.gallery,
+        maxWidth: 1200,
+        maxHeight: 1200,
+        imageQuality: 85,
+      );
+      if (picked == null || !mounted) return;
+      setState(() => _selectedImage = picked);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Impossible de sélectionner une image'),
+          backgroundColor: AppColors.error,
+        ));
+      }
+    }
+  }
+
+  // ── Comprimer et uploader l'image ─────────────────────────────────────────
+  // Route : POST /api/v1/dashboard/upload-image
+  // Champ multipart : 'file'
+  // Réponse : { success, url, key }
+  Future<String?> _uploadImage(XFile imageFile) async {
+    try {
+      setState(() => _isUploadingImage = true);
+
+      // Dossier temp
+      final tempDir = await getTemporaryDirectory();
+      final compressedPath = '${tempDir.path}/produit_${DateTime.now().millisecondsSinceEpoch}.jpg';
+
+      // Compression : max 800KB, qualité 80
+      final result = await FlutterImageCompress.compressAndGetFile(
+        imageFile.path,
+        compressedPath,
+        quality: 80,
+        minWidth: 400,
+        minHeight: 400,
+        format: CompressFormat.jpeg,
+      );
+
+      final filePath = result?.path ?? imageFile.path;
+
+      // Upload via API
+      final api = context.read<ApiService>();
+      final resp = await api.uploadImage(filePath);
+
+      if (!mounted) return null;
+      setState(() => _isUploadingImage = false);
+
+      if (resp.success && resp.data?['url'] != null) {
+        return resp.data!['url'] as String;
+      } else {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text(resp.error ?? 'Erreur upload image'),
+            backgroundColor: AppColors.error,
+          ));
+        }
+        return null;
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isUploadingImage = false);
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Erreur lors de l\'upload de l\'image'),
+          backgroundColor: AppColors.error,
+        ));
+      }
+      return null;
+    }
+  }
 
   Future<void> _save() async {
     if (!_formKey.currentState!.validate()) return;
     setState(() => _isLoading = true);
+
     final api = context.read<ApiService>();
-    final payload = {
+
+    // Upload image si une nouvelle a été sélectionnée
+    String? finalPhotoUrl = _photoUrl;
+    if (_selectedImage != null) {
+      final uploaded = await _uploadImage(_selectedImage!);
+      if (!mounted) return;
+      if (uploaded != null) {
+        finalPhotoUrl = uploaded;
+      } else {
+        // L'upload a échoué — on continue sans image ou avec l'ancienne
+      }
+    }
+
+    final payload = <String, dynamic>{
       'nom': _nomCtrl.text.trim(),
       if (_descCtrl.text.trim().isNotEmpty) 'description': _descCtrl.text.trim(),
       'prix': double.tryParse(_prixCtrl.text) ?? 0,
       if (_selectedCategorieId != null) 'categorie_id': _selectedCategorieId,
-      if (_imageCtrl.text.trim().isNotEmpty) 'image_url': _imageCtrl.text.trim(),
+      'photo_url': finalPhotoUrl, // Champ correct API
       'disponible': _disponible,
     };
+
     final resp = _isEdit
         ? await api.updateProduit(widget.produit!.id, payload)
         : await api.createProduit(payload);
+
     if (!mounted) return;
     setState(() => _isLoading = false);
+
     if (resp.success) {
       Navigator.pop(context);
       widget.onSaved();
     } else {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(resp.error ?? 'Erreur'), backgroundColor: AppColors.error));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(resp.error ?? 'Erreur'),
+        backgroundColor: AppColors.error,
+      ));
     }
   }
 
@@ -651,31 +765,88 @@ class _ProduitDialogState extends State<_ProduitDialog> {
             Row(children: [
               const Icon(Icons.fastfood_rounded, color: AppColors.primary),
               const SizedBox(width: 8),
-              Text(_isEdit ? 'Modifier le produit' : 'Nouveau produit',
-                  style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
-              const Spacer(),
+              Expanded(child: Text(
+                _isEdit ? 'Modifier le produit' : 'Nouveau produit',
+                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+              )),
               IconButton(icon: const Icon(Icons.close_rounded), onPressed: () => Navigator.pop(context), padding: EdgeInsets.zero),
             ]),
             const SizedBox(height: 20),
 
-            // Catégorie
+            // ── Sélecteur d'image ─────────────────────────────────────────
+            const Text('Image', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: AppColors.gray700)),
+            const SizedBox(height: 8),
+            GestureDetector(
+              onTap: _isLoading || _isUploadingImage ? null : _pickImage,
+              child: Container(
+                height: 120,
+                width: double.infinity,
+                decoration: BoxDecoration(
+                  color: AppColors.gray100,
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(
+                    color: AppColors.gray200,
+                    style: BorderStyle.solid,
+                  ),
+                ),
+                child: _isUploadingImage
+                    ? const Center(child: CircularProgressIndicator(color: AppColors.primary))
+                    : _selectedImage != null
+                        ? ClipRRect(
+                            borderRadius: BorderRadius.circular(9),
+                            child: Image.file(
+                              File(_selectedImage!.path),
+                              fit: BoxFit.cover,
+                            ),
+                          )
+                        : _photoUrl != null
+                            ? ClipRRect(
+                                borderRadius: BorderRadius.circular(9),
+                                child: Image.network(
+                                  _photoUrl!,
+                                  fit: BoxFit.cover,
+                                  errorBuilder: (_, __, ___) => _imagePlaceholderContent(),
+                                ),
+                              )
+                            : _imagePlaceholderContent(),
+              ),
+            ),
+            const SizedBox(height: 4),
+            Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+              TextButton.icon(
+                onPressed: _isLoading ? null : _pickImage,
+                icon: const Icon(Icons.photo_library_rounded, size: 14),
+                label: const Text('Choisir une image', style: TextStyle(fontSize: 12)),
+                style: TextButton.styleFrom(foregroundColor: AppColors.primary, padding: EdgeInsets.zero),
+              ),
+              if (_selectedImage != null || _photoUrl != null)
+                TextButton.icon(
+                  onPressed: () => setState(() { _selectedImage = null; _photoUrl = null; }),
+                  icon: const Icon(Icons.delete_rounded, size: 14),
+                  label: const Text('Supprimer', style: TextStyle(fontSize: 12)),
+                  style: TextButton.styleFrom(foregroundColor: AppColors.error, padding: EdgeInsets.zero),
+                ),
+            ]),
+            const SizedBox(height: 12),
+
+            // ── Catégorie ─────────────────────────────────────────────────
             if (widget.categories.isNotEmpty) ...[
               const Text('Catégorie', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: AppColors.gray700)),
               const SizedBox(height: 6),
               DropdownButtonFormField<String>(
-                // ignore: deprecated_member_use
-                value: _selectedCategorieId,
+                initialValue: _selectedCategorieId,
                 decoration: InputDecoration(
                   border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
                   contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
                 ),
                 items: widget.categories.map((c) => DropdownMenuItem(value: c.id, child: Text(c.nom))).toList(),
                 onChanged: (v) => setState(() => _selectedCategorieId = v),
+                validator: (v) => v == null ? 'Catégorie requise' : null,
               ),
               const SizedBox(height: 12),
             ],
 
-            // Nom
+            // ── Nom ───────────────────────────────────────────────────────
             TextFormField(
               controller: _nomCtrl,
               decoration: InputDecoration(
@@ -688,7 +859,7 @@ class _ProduitDialogState extends State<_ProduitDialog> {
             ),
             const SizedBox(height: 12),
 
-            // Description
+            // ── Description ───────────────────────────────────────────────
             TextFormField(
               controller: _descCtrl,
               maxLines: 2,
@@ -704,7 +875,7 @@ class _ProduitDialogState extends State<_ProduitDialog> {
             ),
             const SizedBox(height: 12),
 
-            // Prix
+            // ── Prix ──────────────────────────────────────────────────────
             TextFormField(
               controller: _prixCtrl,
               keyboardType: const TextInputType.numberWithOptions(decimal: true),
@@ -722,20 +893,7 @@ class _ProduitDialogState extends State<_ProduitDialog> {
             ),
             const SizedBox(height: 12),
 
-            // URL image
-            TextFormField(
-              controller: _imageCtrl,
-              keyboardType: TextInputType.url,
-              decoration: InputDecoration(
-                labelText: 'URL image (optionnel)',
-                prefixIcon: const Icon(Icons.image_rounded, size: 18, color: AppColors.gray400),
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-              ),
-            ),
-            const SizedBox(height: 12),
-
-            // Disponible
+            // ── Disponible ────────────────────────────────────────────────
             SwitchListTile(
               title: const Text('Disponible à la vente', style: TextStyle(fontSize: 14)),
               value: _disponible,
@@ -754,9 +912,9 @@ class _ProduitDialogState extends State<_ProduitDialog> {
               )),
               const SizedBox(width: 12),
               Expanded(child: ElevatedButton(
-                onPressed: _isLoading ? null : _save,
+                onPressed: (_isLoading || _isUploadingImage) ? null : _save,
                 style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary, foregroundColor: Colors.white),
-                child: _isLoading
+                child: (_isLoading || _isUploadingImage)
                     ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
                     : Text(_isEdit ? 'Modifier' : 'Créer'),
               )),
@@ -765,5 +923,13 @@ class _ProduitDialogState extends State<_ProduitDialog> {
         ),
       ),
     );
+  }
+
+  Widget _imagePlaceholderContent() {
+    return Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+      Icon(Icons.add_photo_alternate_rounded, size: 36, color: AppColors.gray300),
+      const SizedBox(height: 6),
+      const Text('Appuyer pour ajouter une image', style: TextStyle(fontSize: 12, color: AppColors.gray400)),
+    ]);
   }
 }

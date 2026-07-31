@@ -4,6 +4,13 @@ import '../models/commande_model.dart';
 import '../services/api_service.dart';
 import '../services/realtime_service.dart';
 
+/// Résultat de updateStatut — inclut le lien WhatsApp livreur si applicable
+class UpdateStatutResult {
+  final bool success;
+  final String? lienWhatsappLivreur;
+  const UpdateStatutResult({required this.success, this.lienWhatsappLivreur});
+}
+
 class CommandesProvider extends ChangeNotifier {
   final ApiService _api;
   final RealtimeService _realtime;
@@ -55,19 +62,31 @@ class CommandesProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<bool> updateStatut(String commandeId, String newStatut) async {
-    final resp = await _api.updateCommandeStatut(commandeId, newStatut);
+  /// Met à jour le statut d'une commande
+  /// [livreurId] — si fourni ET statut == 'en_preparation', l'API génère le lien WhatsApp livreur
+  /// Retourne [UpdateStatutResult] avec success + lienWhatsappLivreur si applicable
+  Future<UpdateStatutResult> updateStatut(
+    String commandeId,
+    String newStatut, {
+    String? livreurId,
+  }) async {
+    final resp = await _api.updateCommandeStatut(
+      commandeId,
+      newStatut,
+      livreurId: livreurId,
+    );
     if (resp.success) {
       final idx = _commandes.indexWhere((c) => c.id == commandeId);
       if (idx != -1) {
-        // Mise à jour locale optimiste
         _onStatutChange(commandeId, newStatut);
       }
-      return true;
+      // Récupérer lien WhatsApp livreur si retourné par l'API
+      final lien = resp.data?['lien_whatsapp_livreur'] as String?;
+      return UpdateStatutResult(success: true, lienWhatsappLivreur: lien);
     }
     _error = resp.error;
     notifyListeners();
-    return false;
+    return UpdateStatutResult(success: false);
   }
 
   void _onNouvelleCommande(CommandeModel cmd) {

@@ -1,10 +1,11 @@
 // lib/models/livreur_model.dart
+// Livreur — Synchronisé avec l'API /dashboard/livreurs
+// Champs API : id, nom, whatsapp_number, actif, created_at
 class LivreurModel {
   final String id;
   final String tenantId;
   final String nom;
-  final String? telephone;
-  final String? email;
+  final String? whatsappNumber; // Champ API : whatsapp_number
   final bool actif;
   final int commandesEnCours;
   final int totalCommandes;
@@ -14,8 +15,7 @@ class LivreurModel {
     required this.id,
     required this.tenantId,
     required this.nom,
-    this.telephone,
-    this.email,
+    this.whatsappNumber,
     this.actif = true,
     this.commandesEnCours = 0,
     this.totalCommandes = 0,
@@ -27,8 +27,7 @@ class LivreurModel {
       id: json['id'] as String? ?? '',
       tenantId: json['tenant_id'] as String? ?? '',
       nom: json['nom'] as String? ?? '',
-      telephone: json['telephone'] as String?,
-      email: json['email'] as String?,
+      whatsappNumber: json['whatsapp_number'] as String?,
       actif: json['actif'] as bool? ?? true,
       commandesEnCours: (json['commandes_en_cours'] as num?)?.toInt() ?? 0,
       totalCommandes: (json['total_commandes'] as num?)?.toInt() ?? 0,
@@ -42,18 +41,16 @@ class LivreurModel {
     'id': id,
     'tenant_id': tenantId,
     'nom': nom,
-    'telephone': telephone,
-    'email': email,
+    'whatsapp_number': whatsappNumber,
     'actif': actif,
   };
 
-  LivreurModel copyWith({String? nom, String? telephone, bool? actif}) =>
+  LivreurModel copyWith({String? nom, String? whatsappNumber, bool? actif}) =>
       LivreurModel(
         id: id,
         tenantId: tenantId,
         nom: nom ?? this.nom,
-        telephone: telephone ?? this.telephone,
-        email: email,
+        whatsappNumber: whatsappNumber ?? this.whatsappNumber,
         actif: actif ?? this.actif,
         commandesEnCours: commandesEnCours,
         totalCommandes: totalCommandes,

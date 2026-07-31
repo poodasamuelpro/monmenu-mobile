@@ -34,6 +34,7 @@ import 'screens/restaurant/qrcode_screen.dart';
 import 'screens/restaurant/codes_promo_screen.dart';
 import 'screens/restaurant/restaurant_screen.dart';
 import 'screens/restaurant/apparence_screen.dart';
+import 'screens/notifications/notifications_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -182,6 +183,10 @@ class _MonMenuAppState extends State<MonMenuApp> {
         GoRoute(
           path: '/dashboard/change-password',
           builder: (_, __) => const ChangePasswordScreen(),
+        ),
+        GoRoute(
+          path: '/dashboard/notifications',
+          builder: (_, __) => const NotificationsScreen(),
         ),
       ],
       errorBuilder: (_, state) => Scaffold(
