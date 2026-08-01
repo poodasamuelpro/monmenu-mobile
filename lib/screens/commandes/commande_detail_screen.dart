@@ -439,8 +439,7 @@ class _CommandeDetailScreenState extends State<CommandeDetailScreen> {
             children: [
               if (c.fraisLivraison != null && c.fraisLivraison! > 0)
                 _TotalRow(label: 'Frais de livraison', value: '${c.fraisLivraison!.toStringAsFixed(0)} FCFA'),
-              if (c.reductionAppliquee != null && c.reductionAppliquee! > 0)
-                _TotalRow(label: 'Réduction', value: '- ${c.reductionAppliquee!.toStringAsFixed(0)} FCFA', isDiscount: true),
+              // reductionAppliquee supprimé du modèle (non retourné par l'API)
               const Divider(height: 20),
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,

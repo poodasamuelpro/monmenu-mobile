@@ -144,7 +144,7 @@ class _PlansScreenState extends State<PlansScreen> {
                 ...dashboard.plans.map((plan) => _PlanCard(
                   plan: plan,
                   annuel: _annuel,
-                  isCurrent: dashboard.profil?.plan?.id == plan.id,
+                  isCurrent: false, // plan.id non disponible dans ProfilModel plat (profil retourne plan_nom seulement)
                   onSelect: () => _showUploadSheet(
                     context,
                     plan,
@@ -265,7 +265,7 @@ class _CurrentSubscriptionCard extends StatelessWidget {
           ),
           const SizedBox(height: 8),
           Text(
-            dashboard.profil?.plan?.nom ?? 'Plan Gratuit',
+            dashboard.profil?.planNom ?? 'Plan Gratuit',
             style: const TextStyle(
               color: Colors.white, fontSize: 22, fontWeight: FontWeight.w800,
             ),

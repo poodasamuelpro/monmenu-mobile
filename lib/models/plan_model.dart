@@ -220,35 +220,97 @@ class AbonnementModel {
 }
 
 // Profil complet (endpoint /dashboard/profil)
+// API retourne JSON PLAT — aucun objet imbriqué 'tenant' ou 'plan'
+// Champs directs: id, nom, slug, logo_url, banniere_url, couleur_primaire,
+//   whatsapp_number, statut, plan_nom, pdv_id, pdv_nom, pdv_adresse,
+//   horaires, boutique_url, total_commandes, mode_acces
 class ProfilModel {
-  final TenantInfo tenant;
-  final PlanModel? plan;
+  final String id;
+  final String nom;
+  final String slug;
+  final String statut;
+  final String? couleurPrimaire;
+  final String? couleurSecondaire;
+  final String? logoUrl;
+  final String? banniereUrl;
+  final String? whatsappNumber;
+  final String? domainPerso;
+  final String? planNom;
+  final int commandesIncluses;
+  final double? prixMensuel;
+  final String? pdvId;
+  final String? pdvNom;
+  final String? pdvAdresse;
+  final dynamic horaires;
+  final String? boutiqueUrl;
   final int totalCommandes;
-  final List<PointDeVenteInfo> pointsDeVente;
+  final String? modeAcces;
+  final DateTime? createdAt;
 
   const ProfilModel({
-    required this.tenant,
-    this.plan,
+    required this.id,
+    required this.nom,
+    required this.slug,
+    required this.statut,
+    this.couleurPrimaire,
+    this.couleurSecondaire,
+    this.logoUrl,
+    this.banniereUrl,
+    this.whatsappNumber,
+    this.domainPerso,
+    this.planNom,
+    this.commandesIncluses = 0,
+    this.prixMensuel,
+    this.pdvId,
+    this.pdvNom,
+    this.pdvAdresse,
+    this.horaires,
+    this.boutiqueUrl,
     this.totalCommandes = 0,
-    this.pointsDeVente = const [],
+    this.modeAcces,
+    this.createdAt,
   });
 
   factory ProfilModel.fromJson(Map<String, dynamic> json) {
     return ProfilModel(
-      tenant: TenantInfo.fromJson(json['tenant'] as Map<String, dynamic>? ?? {}),
-      plan: json['plan'] != null
-          ? PlanModel.fromJson(json['plan'] as Map<String, dynamic>)
-          : null,
+      id: json['id'] as String? ?? '',
+      nom: json['nom'] as String? ?? '',
+      slug: json['slug'] as String? ?? '',
+      statut: json['statut'] as String? ?? 'essai',
+      couleurPrimaire: json['couleur_primaire'] as String?,
+      couleurSecondaire: json['couleur_secondaire'] as String?,
+      logoUrl: json['logo_url'] as String?,
+      banniereUrl: json['banniere_url'] as String?,
+      whatsappNumber: json['whatsapp_number'] as String?,
+      domainPerso: json['domaine_perso'] as String?,
+      planNom: json['plan_nom'] as String?,
+      commandesIncluses: (json['commandes_incluses'] as num?)?.toInt() ?? 0,
+      prixMensuel: _toDoubleNullable(json['prix_mensuel']),
+      pdvId: json['pdv_id'] as String?,
+      pdvNom: json['pdv_nom'] as String?,
+      pdvAdresse: json['pdv_adresse'] as String?,
+      horaires: json['horaires'],
+      boutiqueUrl: json['boutique_url'] as String?,
       totalCommandes: (json['total_commandes'] as num?)?.toInt() ?? 0,
-      pointsDeVente: json['points_de_vente'] is List
-          ? (json['points_de_vente'] as List)
-              .map((e) => PointDeVenteInfo.fromJson(e as Map<String, dynamic>))
-              .toList()
-          : [],
+      modeAcces: json['mode_acces'] as String?,
+      createdAt: json['created_at'] != null
+          ? DateTime.tryParse(json['created_at'] as String)
+          : null,
     );
   }
+
+  static double? _toDoubleNullable(dynamic v) {
+    if (v == null) return null;
+    if (v is num) return v.toDouble();
+    return double.tryParse(v.toString());
+  }
+
+  bool get isEssai => statut == 'essai';
+  bool get isActif => statut == 'actif';
 }
 
+// TenantInfo conservé pour compatibilité avec tenant_model.dart et auth_service.dart
+// mais n'est plus utilisé par ProfilModel (qui lit JSON plat depuis /profil)
 class TenantInfo {
   final String id;
   final String nom;
@@ -284,58 +346,97 @@ class TenantInfo {
   );
 }
 
-class PointDeVenteInfo {
-  final String id;
-  final String nom;
-  final String adresse;
-  final bool actif;
-
-  const PointDeVenteInfo({
-    required this.id,
-    required this.nom,
-    required this.adresse,
-    this.actif = true,
-  });
-
-  factory PointDeVenteInfo.fromJson(Map<String, dynamic> json) => PointDeVenteInfo(
-    id: json['id'] as String? ?? '',
-    nom: json['nom'] as String? ?? '',
-    adresse: json['adresse'] as String? ?? '',
-    actif: json['actif'] as bool? ?? true,
-  );
-}
-
 class StatsModel {
-  final int totalCommandes;
-  final double chiffreAffaires;
-  final int commandesAujourdhui;
-  final double caAujourdhui;
-  final int commandesPendantes;
-  final List<StatJournaliere> statsJournalieres;
+  // Champs API /dashboard/stats (noms corrects):
+  //   today, ca_today, month, ca_month, taux_livraison, taux_annulation,
+  //   nb_produits, statuts (map), labels (list strings), values (list int),
+  //   ca_values (list double)
+  final int commandesAujourdhui;    // 'today'
+  final double caAujourdhui;         // 'ca_today'
+  final int commandesMois;           // 'month'
+  final double caMois;               // 'ca_month'
+  final int tauxLivraison;           // 'taux_livraison'
+  final int tauxAnnulation;          // 'taux_annulation'
+  final int nbProduits;              // 'nb_produits'
+  final Map<String, dynamic> statuts; // 'statuts'
+  final List<String> labels;         // 'labels' (ex: ["06-01","06-02",...])
+  final List<int> values;            // 'values' (nb commandes/jour)
+  final List<double> caValues;       // 'ca_values' (CA/jour)
+
+  // Propriétés calculées pour compatibilité avec l'UI existante
+  int get totalCommandes => (statuts.values.fold<int>(0, (sum, v) {
+    return sum + ((v as num?)?.toInt() ?? 0);
+  }));
+  double get chiffreAffaires => caValues.fold(0.0, (a, b) => a + b);
+  int get commandesPendantes => (statuts['en_attente'] as num?)?.toInt() ?? 0;
+
+  // Conversion en StatJournaliere pour les graphiques
+  List<StatJournaliere> get statsJournalieres {
+    final result = <StatJournaliere>[];
+    final now = DateTime.now();
+    final len = labels.length;
+    for (int i = 0; i < len; i++) {
+      final labelStr = labels[i]; // format "MM-DD"
+      DateTime date;
+      try {
+        final parts = labelStr.split('-');
+        if (parts.length == 2) {
+          date = DateTime(now.year, int.parse(parts[0]), int.parse(parts[1]));
+        } else {
+          date = DateTime.tryParse(labelStr) ?? now;
+        }
+      } catch (_) {
+        date = now;
+      }
+      result.add(StatJournaliere(
+        date: date,
+        nbCommandes: i < values.length ? values[i] : 0,
+        chiffreAffaires: i < caValues.length ? caValues[i] : 0.0,
+      ));
+    }
+    return result;
+  }
 
   const StatsModel({
-    this.totalCommandes = 0,
-    this.chiffreAffaires = 0,
     this.commandesAujourdhui = 0,
     this.caAujourdhui = 0,
-    this.commandesPendantes = 0,
-    this.statsJournalieres = const [],
+    this.commandesMois = 0,
+    this.caMois = 0,
+    this.tauxLivraison = 0,
+    this.tauxAnnulation = 0,
+    this.nbProduits = 0,
+    this.statuts = const {},
+    this.labels = const [],
+    this.values = const [],
+    this.caValues = const [],
   });
 
   factory StatsModel.fromJson(Map<String, dynamic> json) {
-    List<StatJournaliere> stats = [];
-    if (json['stats_journalieres'] is List) {
-      stats = (json['stats_journalieres'] as List)
-          .map((e) => StatJournaliere.fromJson(e as Map<String, dynamic>))
-          .toList();
-    }
+    final labelsList = (json['labels'] as List?)
+        ?.map((e) => e.toString())
+        .toList() ?? <String>[];
+    final valuesList = (json['values'] as List?)
+        ?.map((e) => (e as num?)?.toInt() ?? 0)
+        .toList() ?? <int>[];
+    final caValuesList = (json['ca_values'] as List?)
+        ?.map((e) => _toDouble(e))
+        .toList() ?? <double>[];
+    final statutsMap = json['statuts'] is Map
+        ? Map<String, dynamic>.from(json['statuts'] as Map)
+        : <String, dynamic>{};
+
     return StatsModel(
-      totalCommandes: (json['total_commandes'] as num?)?.toInt() ?? 0,
-      chiffreAffaires: _toDouble(json['chiffre_affaires']),
-      commandesAujourdhui: (json['commandes_aujourd_hui'] as num?)?.toInt() ?? 0,
-      caAujourdhui: _toDouble(json['ca_aujourd_hui']),
-      commandesPendantes: (json['commandes_pendantes'] as num?)?.toInt() ?? 0,
-      statsJournalieres: stats,
+      commandesAujourdhui: (json['today'] as num?)?.toInt() ?? 0,
+      caAujourdhui: _toDouble(json['ca_today']),
+      commandesMois: (json['month'] as num?)?.toInt() ?? 0,
+      caMois: _toDouble(json['ca_month']),
+      tauxLivraison: (json['taux_livraison'] as num?)?.toInt() ?? 0,
+      tauxAnnulation: (json['taux_annulation'] as num?)?.toInt() ?? 0,
+      nbProduits: (json['nb_produits'] as num?)?.toInt() ?? 0,
+      statuts: statutsMap,
+      labels: labelsList,
+      values: valuesList,
+      caValues: caValuesList,
     );
   }
 

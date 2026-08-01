@@ -64,39 +64,24 @@ class _ApparenceScreenState extends State<ApparenceScreen> {
       _nomRestaurant = tenant.nom;
     }
 
-    // Charger les infos depuis /dashboard/pdv ou /dashboard/profil
-    final resp = await api.getPdv();
+    // Charger les infos depuis /dashboard/profil (JSON plat — source de vérité)
+    // /profil contient: couleur_primaire, logo_url, banniere_url, nom directement
+    final profilResp = await api.getProfil();
     if (!mounted) return;
 
-    if (resp.success) {
-      final list = resp.data?['points_de_vente'] as List?;
-      if (list != null && list.isNotEmpty) {
-        final pdv = list.first as Map<String, dynamic>;
-        final couleur = pdv['couleur_primaire'] as String?;
-        if (couleur != null) {
-          _couleurPrimaire = _hexToColor(couleur) ?? AppColors.primary;
-        }
-        _logoUrl = pdv['logo_url'] as String?;
-        _banniereUrl = pdv['banniere_url'] as String?;
-        _nomRestaurant = pdv['nom'] as String?;
+    if (profilResp.success) {
+      final data = profilResp.data ?? {};
+      // JSON plat — lire les champs directement (pas d'objet 'tenant' imbriqué)
+      final couleur = data['couleur_primaire'] as String?;
+      if (couleur != null) {
+        _couleurPrimaire = _hexToColor(couleur) ?? AppColors.primary;
       }
+      _logoUrl = data['logo_url'] as String?;
+      _banniereUrl = data['banniere_url'] as String?;
+      _nomRestaurant = data['nom'] as String?;
       setState(() => _isLoading = false);
     } else {
-      // Fallback: charger depuis profil
-      final profilResp = await api.getProfil();
-      if (!mounted) return;
-      if (profilResp.success) {
-        final tenant = profilResp.data?['tenant'] as Map<String, dynamic>?;
-        final couleur = tenant?['couleur_primaire'] as String?;
-        if (couleur != null) {
-          _couleurPrimaire = _hexToColor(couleur) ?? AppColors.primary;
-        }
-        _logoUrl = tenant?['logo_url'] as String?;
-        _nomRestaurant = tenant?['nom'] as String?;
-        setState(() => _isLoading = false);
-      } else {
-        setState(() { _error = resp.error; _isLoading = false; });
-      }
+      setState(() { _error = profilResp.error; _isLoading = false; });
     }
   }
 

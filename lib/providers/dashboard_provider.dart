@@ -94,21 +94,19 @@ class DashboardProvider extends ChangeNotifier {
   }
 
   Future<void> loadStatsJournalieres({int jours = 30}) async {
+    // NOTE: /dashboard/stats retourne déjà labels/values/ca_values (30 jours)
+    // Ce endpoint est conservé pour compatibilité mais n'est plus nécessaire
+    // si loadStats() a déjà été appelé (les données 30j sont dans StatsModel)
+    // On l'appelle seulement si _stats est null
+    if (_stats != null) return;
     final resp = await _api.getStatsJournalieres(jours: jours);
     if (resp.success && resp.data != null) {
-      final list = resp.data!['stats'] as List? ?? [];
-      final statsJ = list
-          .map((e) => StatJournaliere.fromJson(e as Map<String, dynamic>))
-          .toList();
-      _stats = StatsModel(
-        totalCommandes: _stats?.totalCommandes ?? 0,
-        chiffreAffaires: _stats?.chiffreAffaires ?? 0,
-        commandesAujourdhui: _stats?.commandesAujourdhui ?? 0,
-        caAujourdhui: _stats?.caAujourdhui ?? 0,
-        commandesPendantes: _stats?.commandesPendantes ?? 0,
-        statsJournalieres: statsJ,
-      );
-      notifyListeners();
+      // Réutiliser les données brutes si disponibles
+      final data = resp.data!;
+      if (_stats == null) {
+        _stats = StatsModel.fromJson(data);
+        notifyListeners();
+      }
     }
   }
 

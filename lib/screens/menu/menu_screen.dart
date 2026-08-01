@@ -51,25 +51,20 @@ class _MenuScreenState extends State<MenuScreen> with SingleTickerProviderStateM
     if (resp.success) {
       final data = resp.data ?? {};
 
-      // Extraire catégories
-      final catList = (data['categories'] as List? ?? [])
-          .map((j) => CategorieModel.fromJson(j as Map<String, dynamic>))
-          .toList();
-
-      // Extraire produits groupés par catégorie
+      // API retourne: { categories: [{id, nom, ..., produits: [{...}]}] }
+      // Les produits sont IMBRIQUÉS dans chaque catégorie (pas au niveau racine)
+      final catList = <CategorieModel>[];
       final Map<String, List<ProduitModel>> byCateg = {};
-      for (final cat in catList) {
-        byCateg[cat.id] = [];
-      }
 
-      final prodList = (data['produits'] as List? ?? [])
-          .map((j) => ProduitModel.fromJson(j as Map<String, dynamic>))
-          .toList();
-
-      for (final prod in prodList) {
-        if (prod.categorieId.isNotEmpty) {
-          byCateg.putIfAbsent(prod.categorieId, () => []).add(prod);
-        }
+      for (final catJson in (data['categories'] as List? ?? [])) {
+        final catMap = catJson as Map<String, dynamic>;
+        final cat = CategorieModel.fromJson(catMap);
+        catList.add(cat);
+        // Extraire les produits embarqués dans chaque catégorie
+        final embeddedProduits = (catMap['produits'] as List? ?? [])
+            .map((p) => ProduitModel.fromJson(p as Map<String, dynamic>))
+            .toList();
+        byCateg[cat.id] = embeddedProduits;
       }
 
       _tabController?.dispose();

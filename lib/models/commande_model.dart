@@ -1,4 +1,10 @@
 // lib/models/commande_model.dart
+// Champs API /dashboard/commandes (Hono.js/Cloudflare Workers):
+//   id, client_nom, client_telephone, client_adresse, items_json (STRING JSON),
+//   montant_total, frais_livraison, mode_paiement, statut, notes,
+//   livreur_id, created_at, updated_at
+import 'dart:convert';
+
 class CommandeModel {
   final String id;
   final String tenantId;
@@ -9,10 +15,8 @@ class CommandeModel {
   final String? adresseLivraison;
   final double montantTotal;
   final double? fraisLivraison;
-  final String? modesPaiementId;
+  final String? modePaiement;
   final String? notesClient;
-  final String? codePromoId;
-  final double? reductionAppliquee;
   final String? livreurId;
   final DateTime createdAt;
   final DateTime? updatedAt;
@@ -30,10 +34,8 @@ class CommandeModel {
     this.telephoneClient,
     this.adresseLivraison,
     this.fraisLivraison,
-    this.modesPaiementId,
+    this.modePaiement,
     this.notesClient,
-    this.codePromoId,
-    this.reductionAppliquee,
     this.livreurId,
     this.updatedAt,
     this.items = const [],
@@ -41,26 +43,40 @@ class CommandeModel {
   });
 
   factory CommandeModel.fromJson(Map<String, dynamic> json) {
+    // items_json est une STRING JSON dans la réponse API (pas un tableau direct)
     List<CommandeItemModel> items = [];
-    if (json['commandes_items'] is List) {
-      items = (json['commandes_items'] as List)
+    final rawItems = json['items_json'];
+    if (rawItems is String && rawItems.isNotEmpty) {
+      try {
+        final decoded = jsonDecode(rawItems);
+        if (decoded is List) {
+          items = decoded
+              .map((e) => CommandeItemModel.fromJson(e as Map<String, dynamic>))
+              .toList();
+        }
+      } catch (_) {
+        // items_json malformé — ignorer
+      }
+    } else if (rawItems is List) {
+      // Cas où l'API renverrait déjà un tableau (robustesse)
+      items = rawItems
           .map((e) => CommandeItemModel.fromJson(e as Map<String, dynamic>))
           .toList();
     }
+
     return CommandeModel(
       id: json['id'] as String? ?? '',
       tenantId: json['tenant_id'] as String? ?? '',
       pointDeVenteId: json['point_de_vente_id'] as String?,
       statut: json['statut'] as String? ?? 'en_attente',
-      nomClient: json['nom_client'] as String?,
-      telephoneClient: json['telephone_client'] as String?,
-      adresseLivraison: json['adresse_livraison'] as String?,
+      // Noms corrects API: client_nom, client_telephone, client_adresse, notes
+      nomClient: json['client_nom'] as String?,
+      telephoneClient: json['client_telephone'] as String?,
+      adresseLivraison: json['client_adresse'] as String?,
       montantTotal: _toDouble(json['montant_total']),
       fraisLivraison: _toDoubleNullable(json['frais_livraison']),
-      modesPaiementId: json['modes_paiement_id'] as String?,
-      notesClient: json['notes_client'] as String?,
-      codePromoId: json['code_promo_id'] as String?,
-      reductionAppliquee: _toDoubleNullable(json['reduction_appliquee']),
+      modePaiement: json['mode_paiement'] as String?,
+      notesClient: json['notes'] as String?,
       livreurId: json['livreur_id'] as String?,
       createdAt: json['created_at'] != null
           ? DateTime.parse(json['created_at'] as String)
@@ -89,12 +105,12 @@ class CommandeModel {
     'id': id,
     'tenant_id': tenantId,
     'statut': statut,
-    'nom_client': nomClient,
-    'telephone_client': telephoneClient,
-    'adresse_livraison': adresseLivraison,
+    'client_nom': nomClient,
+    'client_telephone': telephoneClient,
+    'client_adresse': adresseLivraison,
     'montant_total': montantTotal,
     'frais_livraison': fraisLivraison,
-    'notes_client': notesClient,
+    'notes': notesClient,
     'created_at': createdAt.toIso8601String(),
   };
 
@@ -140,36 +156,33 @@ class CommandeModel {
 }
 
 class CommandeItemModel {
-  final String id;
-  final String commandeId;
-  final String produitId;
-  final String? varianteProduitId;
+  // Structure items_json: {nom, quantite, prix, produit_id?, notes?}
+  final String? id;
+  final String? produitId;
   final int quantite;
   final double prixUnitaire;
   final String? nomProduit;
   final String? notesItem;
 
   const CommandeItemModel({
-    required this.id,
-    required this.commandeId,
-    required this.produitId,
+    this.id,
+    this.produitId,
     required this.quantite,
     required this.prixUnitaire,
-    this.varianteProduitId,
     this.nomProduit,
     this.notesItem,
   });
 
   factory CommandeItemModel.fromJson(Map<String, dynamic> json) {
     return CommandeItemModel(
-      id: json['id'] as String? ?? '',
-      commandeId: json['commande_id'] as String? ?? '',
-      produitId: json['produit_id'] as String? ?? '',
-      varianteProduitId: json['variante_produit_id'] as String?,
+      id: json['id'] as String?,
+      produitId: json['produit_id'] as String?,
       quantite: (json['quantite'] as num?)?.toInt() ?? 1,
-      prixUnitaire: CommandeModel._toDouble(json['prix_unitaire']),
-      nomProduit: json['nom_produit'] as String?,
-      notesItem: json['notes_item'] as String?,
+      // items_json utilise 'prix' (pas 'prix_unitaire')
+      prixUnitaire: CommandeModel._toDouble(json['prix'] ?? json['prix_unitaire']),
+      // items_json utilise 'nom' (pas 'nom_produit')
+      nomProduit: (json['nom'] ?? json['nom_produit']) as String?,
+      notesItem: json['notes'] as String?,
     );
   }
 

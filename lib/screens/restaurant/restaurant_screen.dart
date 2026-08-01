@@ -67,12 +67,14 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
     if (!mounted) return;
 
     if (resp.success) {
-      final list = resp.data?['points_de_vente'] as List?;
-      if (list != null && list.isNotEmpty) {
-        final pdv = PointDeVenteModel.fromJson(list.first as Map<String, dynamic>);
+      // API retourne: { pdv: {...} | null } — objet unique, PAS une liste
+      final pdvData = resp.data?['pdv'] as Map<String, dynamic>?;
+      if (pdvData != null) {
+        final pdv = PointDeVenteModel.fromJson(pdvData);
         _fillForm(pdv);
         setState(() { _pdv = pdv; _isLoading = false; });
       } else {
+        // Aucun PDV encore créé — formulaire vide, l'API créera au premier PATCH
         setState(() { _isLoading = false; });
       }
     } else {
@@ -83,11 +85,12 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
   void _fillForm(PointDeVenteModel pdv) {
     _nomCtrl.text = pdv.nom;
     _adresseCtrl.text = pdv.adresse;
-    _telephoneCtrl.text = pdv.telephone ?? '';
-    _emailCtrl.text = pdv.email ?? '';
+    // telephone, email, slogan ne sont pas des champs API PDV
+    _telephoneCtrl.text = '';
+    _emailCtrl.text = '';
     _tarifBaseCtrl.text = pdv.tarifLivraisonBase?.toStringAsFixed(0) ?? '';
     _tarifKmCtrl.text = pdv.tarifParKm?.toStringAsFixed(0) ?? '';
-    _sloganCtrl.text = pdv.slogan ?? '';
+    _sloganCtrl.text = '';
 
     if (pdv.horaires != null) {
       for (final key in _joursKeys) {
@@ -107,23 +110,25 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
 
   Future<void> _save() async {
     if (!_formKey.currentState!.validate()) return;
-    if (_pdv == null) return;
 
     setState(() => _isSaving = true);
     final api = context.read<ApiService>();
 
-    final payload = {
+    // PATCH /dashboard/pdv — champs acceptés: nom, adresse, latitude, longitude,
+    // tarif_livraison_base, tarif_par_km, horaires
+    // NE PAS envoyer: telephone, email, slogan (non supportés par l'API)
+    final payload = <String, dynamic>{
       'nom': _nomCtrl.text.trim(),
       'adresse': _adresseCtrl.text.trim(),
-      if (_telephoneCtrl.text.trim().isNotEmpty) 'telephone': _telephoneCtrl.text.trim(),
-      if (_emailCtrl.text.trim().isNotEmpty) 'email': _emailCtrl.text.trim(),
-      if (_tarifBaseCtrl.text.trim().isNotEmpty) 'tarif_livraison_base': double.tryParse(_tarifBaseCtrl.text),
-      if (_tarifKmCtrl.text.trim().isNotEmpty) 'tarif_par_km': double.tryParse(_tarifKmCtrl.text),
-      if (_sloganCtrl.text.trim().isNotEmpty) 'slogan': _sloganCtrl.text.trim(),
+      if (_tarifBaseCtrl.text.trim().isNotEmpty)
+        'tarif_livraison_base': double.tryParse(_tarifBaseCtrl.text.trim()),
+      if (_tarifKmCtrl.text.trim().isNotEmpty)
+        'tarif_par_km': double.tryParse(_tarifKmCtrl.text.trim()),
       'horaires': _horaires,
     };
 
-    final resp = await api.updatePdv(_pdv!.id, payload);
+    // updatePdv sans id — l'API identifie le PDV par le JWT tenant
+    final resp = await api.updatePdv(payload);
     if (!mounted) return;
     setState(() => _isSaving = false);
 

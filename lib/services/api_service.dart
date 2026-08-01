@@ -180,9 +180,9 @@ class ApiService {
   /// GET /dashboard/pdv
   Future<ApiResponse> getPdv() async => get('/dashboard/pdv');
 
-  /// PATCH /dashboard/pdv/:id
-  Future<ApiResponse> updatePdv(String id, Map<String, dynamic> data) async =>
-      patch('/dashboard/pdv/$id', data);
+  /// PATCH /dashboard/pdv  (pas de :id — l'API identifie le PDV par le tenant JWT)
+  Future<ApiResponse> updatePdv(Map<String, dynamic> data) async =>
+      patch('/dashboard/pdv', data);
 
   /// GET /dashboard/profil
   Future<ApiResponse> getProfil() async => get('/dashboard/profil');
