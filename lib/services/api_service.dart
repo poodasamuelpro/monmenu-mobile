@@ -243,9 +243,12 @@ class ApiService {
       get('/paiement/reference');
 
   /// POST /paiement/soumettre — multipart/form-data
-  /// Champs: preuve (File), plan_id, methode_paiement, periodicite
+  /// Champs: preuve (File), plan_id, methode_paiement, numero_expediteur
+  /// CORRECTION R2 (Phase F): numero_expediteur est OBLIGATOIRE depuis FIX-3
+  ///   côté backend. Sans ce champ, le backend retourne 400.
+  ///   periodicite est conservé pour compatibilité mais ignoré côté backend (CYCLE-3).
   /// Retourne : {success, abonnement_id, reference, delai_confirmation,
-  ///             heures_delai: 72, message_38h, plan{nom, montant, devise}}
+  ///             heures_delai, sla_admin_heures, message, plan{nom, montant, devise}}
   ///
   /// SEC-02 : Le token n'est jamais loggé.
   /// SEC-07 : Idempotence — vérifier statut avant renvoi.
@@ -254,6 +257,7 @@ class ApiService {
     required String planId,
     required String methodePaiement,
     required String periodicite,
+    required String numeroExpediteur, // CORRECTION R2 (Phase F) — OBLIGATOIRE
   }) async {
     try {
       final token = _authService.accessToken;
@@ -271,7 +275,10 @@ class ApiService {
       // Champs texte
       request.fields['plan_id'] = planId;
       request.fields['methode_paiement'] = methodePaiement;
-      request.fields['periodicite'] = periodicite;
+      // CORRECTION R2 (Phase F): numero_expediteur requis par le backend depuis FIX-3
+      // Nettoyer : garder uniquement chiffres et '+'
+      final numeroNettoye = numeroExpediteur.replaceAll(RegExp(r'[^0-9+]'), '');
+      request.fields['numero_expediteur'] = numeroNettoye;
 
       // Fichier preuve
       final file = File(filePath);

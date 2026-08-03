@@ -290,7 +290,7 @@ class _CurrentSubscriptionCard extends StatelessWidget {
       case 'actif':
         return 'Abonnement actif ✓';
       case 'en_attente_confirmation':
-        return '⏳ Paiement soumis — confirmation sous 38h';
+        return '⏳ Paiement soumis — confirmation sous 48h';
       case 'inactif':
         return 'Abonnement expiré — Renouvelez pour accéder';
       case 'suspendu':
@@ -361,7 +361,7 @@ class _EnAttenteCard extends StatelessWidget {
           const SizedBox(height: 10),
           const Text(
             'Vous avez 72h pour effectuer le paiement après réception de la référence. '
-            'L\'équipe admin a 38h pour confirmer après soumission de votre preuve.',
+            'L\'équipe admin a 48h pour confirmer après soumission de votre preuve.',
             style: TextStyle(fontSize: 11, color: Colors.orange, height: 1.4),
           ),
         ],
@@ -515,7 +515,7 @@ class _PaymentInfoCard extends StatelessWidget {
                 '   • Carte bancaire Visa/Mastercard\n'
                 '3. Prenez une photo de votre reçu\n'
                 '4. Cliquez sur "J\'ai effectué le paiement" et uploadez la preuve\n'
-                '5. L\'équipe confirme sous 38h',
+                '5. L\'équipe confirme sous 48h',
                 style: TextStyle(
                     fontSize: 12, color: AppColors.gray600, height: 1.7),
               ),
@@ -834,12 +834,20 @@ class _UploadProofSheetState extends State<_UploadProofSheet> {
   String? _error;
   String? _selectedImagePath;
   int? _imageSizeBytes;
+  // CORRECTION R2 (Phase F) — numéro utilisateur pour le paiement, requis par le backend
+  final TextEditingController _numeroController = TextEditingController();
 
   static const _methods = [
     ('mobile_money', 'Mobile Money (Orange Money, Wave, MTN)'),
     ('virement', 'Virement bancaire'),
     ('carte', 'Carte bancaire Visa/Mastercard'),
   ];
+
+  @override
+  void dispose() {
+    _numeroController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -1053,6 +1061,32 @@ class _UploadProofSheetState extends State<_UploadProofSheet> {
 
             const SizedBox(height: 16),
 
+            // CORRECTION R2 (Phase F) — champ obligatoire : numéro utilisé pour le paiement
+            const Text(
+              'Numéro utilisé pour le paiement *',
+              style: TextStyle(
+                  fontWeight: FontWeight.w600,
+                  fontSize: 13,
+                  color: AppColors.gray700),
+            ),
+            const SizedBox(height: 6),
+            TextFormField(
+              controller: _numeroController,
+              keyboardType: TextInputType.phone,
+              maxLength: 20,
+              decoration: const InputDecoration(
+                hintText: '+226 70 00 00 00',
+                helperText:
+                    'Numéro Mobile Money ou compte bancaire ayant effectué le virement.',
+                helperMaxLines: 2,
+                counterText: '',
+                contentPadding:
+                    EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              ),
+            ),
+
+            const SizedBox(height: 16),
+
             if (_error != null) ...[
               Container(
                 padding: const EdgeInsets.all(10),
@@ -1084,7 +1118,10 @@ class _UploadProofSheetState extends State<_UploadProofSheet> {
                 label: Text(_isUploading
                     ? 'Envoi en cours…'
                     : 'J\'ai effectué le paiement'),
-                onPressed: _isUploading || _selectedImagePath == null
+                // CORRECTION R2 : le bouton est actif uniquement si image + numéro présents
+                onPressed: _isUploading ||
+                        _selectedImagePath == null ||
+                        _numeroController.text.trim().isEmpty
                     ? null
                     : _submitProof,
               ),
@@ -1139,11 +1176,13 @@ class _UploadProofSheetState extends State<_UploadProofSheet> {
       final dashboard = context.read<DashboardProvider>();
       dashboard.setUploadLoading();
 
+      // CORRECTION R2 (Phase F) — transmettre le numéro expéditeur au service
       final result = await widget.uploadService.uploadPreuve(
         filePath: _selectedImagePath!,
         planId: widget.plan?.id ?? '',
         methodePaiement: _selectedMethod,
         periodicite: widget.periodicite ?? 'mensuel',
+        numeroExpediteur: _numeroController.text.trim(),
       );
 
       if (!mounted) return;
@@ -1154,7 +1193,7 @@ class _UploadProofSheetState extends State<_UploadProofSheet> {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text(
-                '✅ Preuve envoyée ! Confirmation sous 38h.'),
+                '✅ Preuve envoyée ! Confirmation sous 48h.'),
             backgroundColor: AppColors.success,
             duration: Duration(seconds: 4),
           ),

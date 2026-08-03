@@ -44,7 +44,10 @@ class PlanModel {
       fraisParCommande: _toDouble(json['frais_par_commande']),
       limitePdv: (json['limite_pdv'] as num?)?.toInt() ?? 1,
       fonctionnalites: fonctionnalites,
-      actif: json['actif'] as bool? ?? true,
+      // CORRECTION R3 (Phase F) : D1 stocke 'actif' comme entier (1/0), pas bool
+      // json['actif'] as bool? crasherait sur un entier.
+      // On utilise une conversion robuste : 1 → true, 0 → false, bool conservé tel quel.
+      actif: _toBool(json['actif']),
       ordreAffichage: (json['ordre_affichage'] as num?)?.toInt() ?? 0,
     );
   }
@@ -53,6 +56,15 @@ class PlanModel {
     if (v == null) return 0.0;
     if (v is num) return v.toDouble();
     return double.tryParse(v.toString()) ?? 0.0;
+  }
+
+  // CORRECTION R3 (Phase F) : conversion robuste bool/int (D1 envoie des entiers)
+  static bool _toBool(dynamic v) {
+    if (v == null) return true;
+    if (v is bool) return v;
+    if (v is int) return v != 0;
+    if (v is String) return v == '1' || v.toLowerCase() == 'true';
+    return true;
   }
 
   bool get isGratuit => prixMensuel == 0;

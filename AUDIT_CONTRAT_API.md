@@ -521,3 +521,44 @@ L'API retourne `{ codes: [...] }` mais `CodePromoModel` semble être instancié 
 ---
 
 *Audit généré en Phase E — commit de référence à créer avec toutes les corrections ci-dessus.*
+
+---
+
+## Corrections Phase F — Session audit croisé complet ($(date +%Y-%m-%d))
+
+Suite à l'audit complet réalisé avec lecture simultanée des deux dépôts (monmenu + monmenu-mobile) et du JS dashboard web (référence de vérité), les bugs résiduels R1 et R2 de Phase E ont été corrigés, ainsi qu'un bug R3 supplémentaire identifié.
+
+### Corrections appliquées en Phase F
+
+| # | Fichier | Correction | Type |
+|---|---------|-----------|------|
+| F1 | `lib/models/livreur_model.dart` (CodePromoModel) | `json['type_reduction']` → `json['type'] ?? json['type_reduction']` | R1 ❌→✅ |
+| F2 | `lib/models/livreur_model.dart` (CodePromoModel) | `json['max_utilisations']` → `json['usage_max'] ?? json['max_utilisations']` | R1 ❌→✅ |
+| F3 | `lib/models/livreur_model.dart` (CodePromoModel) | `json['utilisations_actuelles']` → `json['usage_actuel'] ?? json['utilisations_actuelles']` | R1 ❌→✅ |
+| F4 | `lib/models/livreur_model.dart` (CodePromoModel) | `json['date_expiration']` → `json['date_fin'] ?? json['date_expiration']` | R1 ❌→✅ |
+| F5 | `lib/services/api_service.dart` | Ajout paramètre `required String numeroExpediteur` + `request.fields['numero_expediteur']` | R2 ❌→✅ |
+| F6 | `lib/services/payment_upload_service.dart` | Ajout `numeroExpediteur` dans `PendingUpload`, `uploadPreuve()`, `_attemptUpload()`, `retryPendingUploadIfNeeded()` | R2 ❌→✅ |
+| F7 | `lib/screens/plans/plans_screen.dart` | Ajout champ TextFormField "Numéro utilisé pour le paiement" dans `_UploadProofSheet` + bouton désactivé si vide | R2 ❌→✅ |
+| F8 | `lib/models/plan_model.dart` | `json['actif'] as bool? ?? true` → `_toBool(json['actif'])` (robustesse entiers D1) | R3 ❌→✅ |
+| F9 | `lib/screens/plans/plans_screen.dart` | Messages SLA "38h" → "48h" (cohérence avec backend `SLA_ADMIN_HEURES`) | INFO ✅ |
+| F10 | `lib/services/notification_service.dart` | Message "Confirmation sous 38h" → "Confirmation sous 48h" | INFO ✅ |
+
+### Statut des bugs après Phase F
+
+| # | Endpoint | Bug | Statut |
+|---|---------|-----|--------|
+| R1 | `GET /dashboard/codes-promo` | Noms de champs `type`, `usage_max`, `usage_actuel`, `date_fin` | ✅ CORRIGÉ (F1-F4) |
+| R2 | `POST /paiement/soumettre` | `numero_expediteur` manquant | ✅ CORRIGÉ (F5-F7) |
+| R3 (ex-note) | `GET /dashboard/livreurs` | `commandes_en_cours`, `total_commandes` absents API | ⚠️ DÉFAUT SÛUR — fallback 0, pas de crash |
+| R4 | `GET /api/v1/plans` | `actif` retourné comme entier D1 (1/0) pas bool | ✅ CORRIGÉ (F8) |
+
+### Résultat flutter analyze après Phase F
+
+```
+9 issues found (0 erreurs, 3 warnings non-bloquants, 6 infos de style)
+- warnings : dossiers assets/ manquants (pubspec.yaml), unused_element_parameter
+- infos : use_build_context_synchronously, curly_braces_in_flow_control_structures
+```
+
+**Aucune erreur de compilation. Build APK autorisé.**
+
