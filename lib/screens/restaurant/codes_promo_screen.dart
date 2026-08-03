@@ -368,15 +368,21 @@ class _PromoDialogState extends State<_PromoDialog> {
     setState(() => _isLoading = true);
 
     final api = context.read<ApiService>();
+    // CORRECTION R6 (Phase F) — champs API corrects :
+    //   'type'         (pas 'type_reduction')
+    //   'usage_max'    (pas 'max_utilisations')
+    //   'date_fin'     (pas 'date_expiration') — aligné sur CodePromoModel.fromJson
+    //   Champ 'code' : envoyé explicitement pour la route POST /dashboard/codes-promo
     final payload = {
       'code': _codeCtrl.text.trim().toUpperCase(),
-      'type_reduction': _typeReduction,
+      'type': _typeReduction,                                             // R6: était 'type_reduction'
       'valeur': double.tryParse(_valeurCtrl.text) ?? 0,
       if (_minCommandeCtrl.text.trim().isNotEmpty)
         'min_commande': double.tryParse(_minCommandeCtrl.text),
       if (_maxUtilCtrl.text.trim().isNotEmpty)
-        'max_utilisations': int.tryParse(_maxUtilCtrl.text),
-      if (_dateExpiration != null) 'date_expiration': _dateExpiration!.toIso8601String(),
+        'usage_max': int.tryParse(_maxUtilCtrl.text),                    // R6: était 'max_utilisations'
+      if (_dateExpiration != null)
+        'date_fin': _dateExpiration!.toIso8601String(),                  // R6: était 'date_expiration'
       'actif': true,
     };
 

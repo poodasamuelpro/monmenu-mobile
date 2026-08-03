@@ -182,7 +182,8 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
           child: Divider(height: 1, color: AppColors.gray200),
         ),
         actions: [
-          if (!_isLoading && _pdv != null)
+          // CORRECTION R8 — Bouton visible même si _pdv == null (création via PATCH)
+          if (!_isLoading)
             TextButton(
               onPressed: _isSaving ? null : _save,
               child: _isSaving
@@ -198,8 +199,9 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
   Widget _buildBody() {
     if (_isLoading) return const LoadingWidget(message: 'Chargement du restaurant…');
     if (_error != null) return AppErrorWidget(message: _error!, onRetry: _loadPdv);
-    if (_pdv == null) return const Center(child: Text('Aucun point de vente configuré'));
 
+    // CORRECTION R8 (Phase F) — Le PATCH /pdv crée le PDV automatiquement s'il n'existe pas.
+    // On affiche toujours le formulaire même si _pdv == null (onboarding).
     return Form(
       key: _formKey,
       child: SingleChildScrollView(

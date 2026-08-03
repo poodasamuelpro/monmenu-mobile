@@ -28,13 +28,24 @@ class LivreurModel {
       tenantId: json['tenant_id'] as String? ?? '',
       nom: json['nom'] as String? ?? '',
       whatsappNumber: json['whatsapp_number'] as String?,
-      actif: json['actif'] as bool? ?? true,
+      // CORRECTION R5 (Phase F) — Supabase retourne actif en bool,
+      // mais PATCH retourne actif: 0/1 (entier). _toBool() gère les deux.
+      actif: _toBool(json['actif']),
       commandesEnCours: (json['commandes_en_cours'] as num?)?.toInt() ?? 0,
       totalCommandes: (json['total_commandes'] as num?)?.toInt() ?? 0,
       createdAt: json['created_at'] != null
           ? DateTime.tryParse(json['created_at'] as String)
           : null,
     );
+  }
+
+  /// Convertit bool | int | String en bool (robustesse Supabase/D1/entiers)
+  static bool _toBool(dynamic v) {
+    if (v == null) return true;
+    if (v is bool) return v;
+    if (v is int) return v != 0;
+    if (v is String) return v == '1' || v.toLowerCase() == 'true';
+    return true;
   }
 
   Map<String, dynamic> toJson() => {
@@ -193,7 +204,8 @@ class PointDeVenteModel {
       longitude: CodePromoModel._toDoubleNullable(json['longitude']),
       tarifLivraisonBase: CodePromoModel._toDoubleNullable(json['tarif_livraison_base']),
       tarifParKm: CodePromoModel._toDoubleNullable(json['tarif_par_km']),
-      actif: json['actif'] as bool? ?? true,
+      // CORRECTION R7 (Phase F) — actif peut être bool ou int selon le contexte
+      actif: LivreurModel._toBool(json['actif']),
       horaires: json['horaires'] as Map<String, dynamic>?,
       createdAt: json['created_at'] != null
           ? DateTime.tryParse(json['created_at'] as String)
