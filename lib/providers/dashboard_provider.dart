@@ -83,14 +83,27 @@ class DashboardProvider extends ChangeNotifier {
 
   Future<void> loadStats() async {
     _isLoadingStats = true;
+    _error = null;
     notifyListeners();
 
-    final resp = await _api.getStats();
-    if (resp.success && resp.data != null) {
-      _stats = StatsModel.fromJson(resp.data!);
+    try {
+      final resp = await _api.getStats();
+      if (resp.success && resp.data != null) {
+        _stats = StatsModel.fromJson(resp.data!);
+      } else {
+        _error = resp.error ?? 'Erreur chargement statistiques';
+        if (kDebugMode) debugPrint('[DashboardProvider] loadStats error: ${resp.error}');
+      }
+    } catch (e, st) {
+      _error = 'Erreur inattendue lors du chargement des statistiques';
+      if (kDebugMode) {
+        debugPrint('[DashboardProvider] loadStats exception: $e');
+        debugPrint('$st');
+      }
+    } finally {
+      _isLoadingStats = false;
+      notifyListeners();
     }
-    _isLoadingStats = false;
-    notifyListeners();
   }
 
   Future<void> loadStatsJournalieres({int jours = 30}) async {
@@ -99,13 +112,19 @@ class DashboardProvider extends ChangeNotifier {
     // si loadStats() a déjà été appelé (les données 30j sont dans StatsModel)
     // On l'appelle seulement si _stats est null
     if (_stats != null) return;
-    final resp = await _api.getStatsJournalieres(jours: jours);
-    if (resp.success && resp.data != null) {
-      // Réutiliser les données brutes si disponibles
-      final data = resp.data!;
-      if (_stats == null) {
-        _stats = StatsModel.fromJson(data);
-        notifyListeners();
+    try {
+      final resp = await _api.getStatsJournalieres(jours: jours);
+      if (resp.success && resp.data != null) {
+        final data = resp.data!;
+        if (_stats == null) {
+          _stats = StatsModel.fromJson(data);
+          notifyListeners();
+        }
+      }
+    } catch (e, st) {
+      if (kDebugMode) {
+        debugPrint('[DashboardProvider] loadStatsJournalieres exception: $e');
+        debugPrint('$st');
       }
     }
   }
@@ -114,28 +133,57 @@ class DashboardProvider extends ChangeNotifier {
     _isLoadingProfil = true;
     notifyListeners();
 
-    final resp = await _api.getProfil();
-    if (resp.success && resp.data != null) {
-      _profil = ProfilModel.fromJson(resp.data!);
+    try {
+      final resp = await _api.getProfil();
+      if (resp.success && resp.data != null) {
+        _profil = ProfilModel.fromJson(resp.data!);
+      } else if (!resp.success) {
+        if (kDebugMode) debugPrint('[DashboardProvider] loadProfil error: ${resp.error}');
+      }
+    } catch (e, st) {
+      if (kDebugMode) {
+        debugPrint('[DashboardProvider] loadProfil exception: $e');
+        debugPrint('$st');
+      }
+    } finally {
+      _isLoadingProfil = false;
+      notifyListeners();
     }
-    _isLoadingProfil = false;
-    notifyListeners();
   }
 
   Future<void> loadPlans() async {
     _isLoadingPlans = true;
     notifyListeners();
 
-    final resp = await _api.getPlans();
-    if (resp.success) {
-      final list = resp.data?['plans'] as List? ?? [];
-      _plans = list
-          .map((e) => PlanModel.fromJson(e as Map<String, dynamic>))
-          .toList();
-      _plans.sort((a, b) => a.ordreAffichage.compareTo(b.ordreAffichage));
+    try {
+      final resp = await _api.getPlans();
+      if (resp.success) {
+        final rawList = resp.data?['plans'] as List? ?? [];
+        final parsed = <PlanModel>[];
+        for (final e in rawList) {
+          try {
+            parsed.add(PlanModel.fromJson(e as Map<String, dynamic>));
+          } catch (parseErr) {
+            if (kDebugMode) {
+              debugPrint('[DashboardProvider] loadPlans: erreur parsing plan: $parseErr');
+              debugPrint('  payload: $e');
+            }
+          }
+        }
+        _plans = parsed;
+        _plans.sort((a, b) => a.ordreAffichage.compareTo(b.ordreAffichage));
+      } else {
+        if (kDebugMode) debugPrint('[DashboardProvider] loadPlans error: ${resp.error}');
+      }
+    } catch (e, st) {
+      if (kDebugMode) {
+        debugPrint('[DashboardProvider] loadPlans exception: $e');
+        debugPrint('$st');
+      }
+    } finally {
+      _isLoadingPlans = false;
+      notifyListeners();
     }
-    _isLoadingPlans = false;
-    notifyListeners();
   }
 
   Future<void> loadAll() async {
@@ -153,14 +201,24 @@ class DashboardProvider extends ChangeNotifier {
     _abonnementError = null;
     notifyListeners();
 
-    final resp = await _api.getAbonnementActif();
-    if (resp.success && resp.data != null) {
-      _abonnementStatut = resp.data;
-    } else {
-      _abonnementError = resp.error ?? 'Erreur chargement abonnement';
+    try {
+      final resp = await _api.getAbonnementActif();
+      if (resp.success && resp.data != null) {
+        _abonnementStatut = resp.data;
+      } else {
+        _abonnementError = resp.error ?? 'Erreur chargement abonnement';
+        if (kDebugMode) debugPrint('[DashboardProvider] loadAbonnement error: ${resp.error}');
+      }
+    } catch (e, st) {
+      _abonnementError = 'Erreur inattendue lors du chargement de l\'abonnement';
+      if (kDebugMode) {
+        debugPrint('[DashboardProvider] loadAbonnement exception: $e');
+        debugPrint('$st');
+      }
+    } finally {
+      _isLoadingAbonnement = false;
+      notifyListeners();
     }
-    _isLoadingAbonnement = false;
-    notifyListeners();
   }
 
   /// Charge la référence de paiement depuis GET /paiement/reference.
@@ -168,17 +226,27 @@ class DashboardProvider extends ChangeNotifier {
     _isLoadingReference = true;
     notifyListeners();
 
-    final resp = await _api.getReferencePaiement();
-    if (resp.success && resp.data != null) {
-      _referencePaiement = resp.data!['reference'] as String?;
-      final instructions = resp.data!['instructions'];
-      if (instructions is List) {
-        _referenceInstructions =
-            instructions.map((e) => e.toString()).toList();
+    try {
+      final resp = await _api.getReferencePaiement();
+      if (resp.success && resp.data != null) {
+        _referencePaiement = resp.data!['reference'] as String?;
+        final instructions = resp.data!['instructions'];
+        if (instructions is List) {
+          _referenceInstructions =
+              instructions.map((e) => e.toString()).toList();
+        }
+      } else {
+        if (kDebugMode) debugPrint('[DashboardProvider] loadReferencePaiement error: ${resp.error}');
       }
+    } catch (e, st) {
+      if (kDebugMode) {
+        debugPrint('[DashboardProvider] loadReferencePaiement exception: $e');
+        debugPrint('$st');
+      }
+    } finally {
+      _isLoadingReference = false;
+      notifyListeners();
     }
-    _isLoadingReference = false;
-    notifyListeners();
   }
 
   /// Met à jour l'état de l'upload en cours.

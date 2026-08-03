@@ -1,6 +1,6 @@
 // lib/services/auth_service.dart
 // Auth via Supabase direct + stockage sécurisé flutter_secure_storage
-// FIX: tryRestoreSession() utilise correctement setSession(access, refresh)
+// FIX Phase-E: tryRestoreSession() — setSession(refreshToken) correct (supabase_flutter ^2.x)
 import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -36,8 +36,8 @@ class AuthService extends ChangeNotifier {
   bool get isAuthenticated => _accessToken != null && _tenant != null;
 
   // ── Init: restaurer session depuis secure storage ──────────────────────────
-  // FIX CRITIQUE: setSession() accepte (accessToken, refreshToken)
-  // L'ancienne version passait uniquement le token d'accès → session jamais restaurée
+  // FIX Phase-E: setSession() dans supabase_flutter ^2.x prend UN seul arg = refreshToken
+  // Le refreshToken est chargé depuis le secure storage puis passé à setSession()
   Future<bool> tryRestoreSession() async {
     try {
       _setLoading(true);
@@ -79,9 +79,10 @@ class AuthService extends ChangeNotifier {
       // 3. Restaurer session Supabase avec BOTH tokens
       if (refreshToken != null && refreshToken.isNotEmpty) {
         try {
-          // FIX: setSession prend (accessToken, refreshToken) — CORRECT
+          // FIX RÉEL: setSession() prend UN seul arg = le refreshToken (supabase_flutter ^2.x)
+          // L'accessToken n'est PAS le bon arg ici — c'est le refreshToken qui restaure la session
           final resp =
-              await _supabase.auth.setSession(accessToken);
+              await _supabase.auth.setSession(refreshToken);
           if (resp.session != null && !resp.session!.isExpired) {
             _accessToken = resp.session!.accessToken;
             _refreshToken = resp.session!.refreshToken;

@@ -170,8 +170,10 @@ class NotificationService extends ChangeNotifier {
           callback: (payload) {
             final record = payload.newRecord;
             final commandeId = record['id'] as String? ?? '';
+            // FIX Phase-E: La colonne Supabase s'appelle 'client_nom' (pas 'nom_client')
+            // Les payloads Realtime reflètent le vrai nom de colonne DB, pas les alias API
             final nomClient =
-                record['nom_client'] as String? ?? 'Client inconnu';
+                record['client_nom'] as String? ?? 'Client inconnu';
             final montant =
                 (record['montant_total'] as num?)?.toDouble() ?? 0.0;
             final numero = record['numero_commande'] as String?;

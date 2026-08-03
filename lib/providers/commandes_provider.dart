@@ -47,19 +47,38 @@ class CommandesProvider extends ChangeNotifier {
     _error = null;
     notifyListeners();
 
-    final resp = await _api.getCommandes();
-    if (resp.success) {
-      final list = resp.data?['commandes'] as List? ?? [];
-      _commandes = list
-          .map((e) => CommandeModel.fromJson(e as Map<String, dynamic>))
-          .toList();
-      _updatePendingCount();
-    } else {
-      _error = resp.error;
+    try {
+      final resp = await _api.getCommandes();
+      if (resp.success) {
+        final rawList = resp.data?['commandes'] as List? ?? [];
+        final parsed = <CommandeModel>[];
+        for (final e in rawList) {
+          try {
+            parsed.add(CommandeModel.fromJson(e as Map<String, dynamic>));
+          } catch (parseErr) {
+            // Isolation par élément : une commande mal formée ne bloque pas les autres
+            if (kDebugMode) {
+              debugPrint('[CommandesProvider] loadCommandes: erreur parsing commande: $parseErr');
+              debugPrint('  payload brut: $e');
+            }
+          }
+        }
+        _commandes = parsed;
+        _updatePendingCount();
+      } else {
+        _error = resp.error;
+        if (kDebugMode) debugPrint('[CommandesProvider] loadCommandes error: ${resp.error}');
+      }
+    } catch (e, st) {
+      _error = 'Erreur inattendue lors du chargement des commandes';
+      if (kDebugMode) {
+        debugPrint('[CommandesProvider] loadCommandes exception: $e');
+        debugPrint('$st');
+      }
+    } finally {
+      _isLoading = false;
+      notifyListeners();
     }
-
-    _isLoading = false;
-    notifyListeners();
   }
 
   /// Met à jour le statut d'une commande
@@ -70,23 +89,34 @@ class CommandesProvider extends ChangeNotifier {
     String newStatut, {
     String? livreurId,
   }) async {
-    final resp = await _api.updateCommandeStatut(
-      commandeId,
-      newStatut,
-      livreurId: livreurId,
-    );
-    if (resp.success) {
-      final idx = _commandes.indexWhere((c) => c.id == commandeId);
-      if (idx != -1) {
-        _onStatutChange(commandeId, newStatut);
+    try {
+      final resp = await _api.updateCommandeStatut(
+        commandeId,
+        newStatut,
+        livreurId: livreurId,
+      );
+      if (resp.success) {
+        final idx = _commandes.indexWhere((c) => c.id == commandeId);
+        if (idx != -1) {
+          _onStatutChange(commandeId, newStatut);
+        }
+        // Récupérer lien WhatsApp livreur si retourné par l'API
+        final lien = resp.data?['lien_whatsapp_livreur'] as String?;
+        return UpdateStatutResult(success: true, lienWhatsappLivreur: lien);
       }
-      // Récupérer lien WhatsApp livreur si retourné par l'API
-      final lien = resp.data?['lien_whatsapp_livreur'] as String?;
-      return UpdateStatutResult(success: true, lienWhatsappLivreur: lien);
+      _error = resp.error;
+      if (kDebugMode) debugPrint('[CommandesProvider] updateStatut error: ${resp.error}');
+      notifyListeners();
+      return UpdateStatutResult(success: false);
+    } catch (e, st) {
+      _error = 'Erreur inattendue lors de la mise à jour du statut';
+      if (kDebugMode) {
+        debugPrint('[CommandesProvider] updateStatut exception: $e');
+        debugPrint('$st');
+      }
+      notifyListeners();
+      return UpdateStatutResult(success: false);
     }
-    _error = resp.error;
-    notifyListeners();
-    return UpdateStatutResult(success: false);
   }
 
   void _onNouvelleCommande(CommandeModel cmd) {
