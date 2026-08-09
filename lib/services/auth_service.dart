@@ -258,23 +258,56 @@ class AuthService extends ChangeNotifier {
     _setLoading(false);
   }
 
-  // ── Mot de passe oublié ────────────────────────────────────────────────────
-  Future<AuthResult> sendPasswordResetOtp(String email) async {
-    _setLoading(true);
-    try {
-      await _supabase.auth.resetPasswordForEmail(
-        email.trim(),
-        redirectTo: null,
-      );
-      return AuthResult.success(message: 'Code envoyé à $email');
-    } on AuthException catch (e) {
-      return AuthResult.failure(_mapAuthError(e.message));
-    } catch (_) {
-      return AuthResult.failure(
-          'Erreur lors de l\'envoi du code. Réessayez.');
-    } finally {
-      _setLoading(false);
+  // ── Mot de passe oublié — FLUX OTP À 6 CHIFFRES ──────────────────────────
+  // ⚠️ REMPLACEMENT COMPLET : l'ancienne implémentation utilisait le Supabase SDK
+  // directement (resetPasswordForEmail → envoie un LIEN) et verifyOTP avec
+  // OtpType.recovery (type non conforme au backend qui utilise type:'email').
+  //
+  // NOUVEAU FLUX (confirmé en lisant api-auth.ts) :
+  //   Étape 1 — POST /api/v1/auth/forgot-password → Supabase signInWithOtp()
+  //             → code à 6 chiffres envoyé par email, JAMAIS un lien
+  //   Étape 2 — POST /api/v1/auth/verify-otp { email, token }
+  //             → { access_token, refresh_token } renvoyés par le backend
+  //   Étape 3 — POST /api/v1/auth/reset-password { password }
+  //             → Bearer = access_token obtenu à l'étape 2 (pas le token de session)
+  //
+  // NOTE : les appels réseau se font dans forgot_password_screen.dart via ApiService
+  // (même raison que changePassword : éviter la dépendance circulaire).
+  // Ces méthodes restent ici pour valider les données côté client uniquement.
+
+  /// Validation email pour étape 1 (format basique)
+  String? validateEmailForOtp(String email) {
+    final trimmed = email.trim();
+    if (trimmed.isEmpty) return 'Entrez votre adresse email.';
+    if (!trimmed.contains('@') || !trimmed.contains('.')) {
+      return 'Format d\'email invalide.';
     }
+    return null; // OK
+  }
+
+  /// Validation OTP pour étape 2 (exactement 6 chiffres)
+  String? validateOtpCode(String otp) {
+    final trimmed = otp.trim();
+    if (trimmed.length != 6) return 'Le code doit contenir exactement 6 chiffres.';
+    if (!RegExp(r'^\d{6}$').hasMatch(trimmed)) {
+      return 'Le code doit être numérique (6 chiffres).';
+    }
+    return null; // OK
+  }
+
+  /// Validation du nouveau mot de passe (étape 3)
+  String? validateNewPassword(String password) {
+    if (password.length < 8) {
+      return 'Le mot de passe doit contenir au moins 8 caractères.';
+    }
+    return null; // OK
+  }
+
+  // Méthodes conservées pour compatibilité — délèguent la validation uniquement
+  Future<AuthResult> sendPasswordResetOtp(String email) async {
+    final err = validateEmailForOtp(email);
+    if (err != null) return AuthResult.failure(err);
+    return AuthResult.success(message: 'validation_ok');
   }
 
   Future<AuthResult> resetPasswordWithOtp({
@@ -282,74 +315,34 @@ class AuthService extends ChangeNotifier {
     required String otp,
     required String newPassword,
   }) async {
-    _setLoading(true);
-    try {
-      if (newPassword.length < 8) {
-        return AuthResult.failure(
-            'Le mot de passe doit contenir au moins 8 caractères.');
-      }
-
-      final resp = await _supabase.auth.verifyOTP(
-        email: email.trim(),
-        token: otp.trim(),
-        type: OtpType.recovery,
-      );
-
-      if (resp.session == null) {
-        return AuthResult.failure('Code invalide ou expiré.');
-      }
-
-      await _supabase.auth.updateUser(UserAttributes(password: newPassword));
-      return AuthResult.success(
-          message: 'Mot de passe mis à jour avec succès.');
-    } on AuthException catch (e) {
-      if (e.message.contains('otp')) {
-        return AuthResult.failure('Code OTP invalide ou expiré.');
-      }
-      return AuthResult.failure(_mapAuthError(e.message));
-    } catch (e) {
-      return AuthResult.failure(
-          'Erreur lors de la réinitialisation.');
-    } finally {
-      _setLoading(false);
-    }
+    // Cette méthode n'est plus utilisée directement — voir forgot_password_screen.dart
+    final otpErr = validateOtpCode(otp);
+    if (otpErr != null) return AuthResult.failure(otpErr);
+    final pwdErr = validateNewPassword(newPassword);
+    if (pwdErr != null) return AuthResult.failure(pwdErr);
+    return AuthResult.success(message: 'validation_ok');
   }
 
+  // ── Changement de mot de passe (utilisateur connecté) ──────────────────────
+  // NOTE: la logique d'appel API est désormais dans ChangePasswordScreen directement
+  // (via ApiService.post '/dashboard/profil/change-password') pour éviter la dépendance
+  // circulaire AuthService ↔ ApiService. Cette méthode est conservée pour rétrocompabilité
+  // mais délègue la validation côté client uniquement.
   Future<AuthResult> changePassword({
     required String currentPassword,
     required String newPassword,
   }) async {
-    _setLoading(true);
-    try {
-      if (newPassword.length < 8) {
-        return AuthResult.failure(
-            'Nouveau mot de passe: 8 caractères minimum.');
-      }
-
-      final email = _supabase.auth.currentUser?.email;
-      if (email == null) {
-        return AuthResult.failure('Session expirée. Reconnectez-vous.');
-      }
-
-      final verify = await _supabase.auth.signInWithPassword(
-        email: email,
-        password: currentPassword,
-      );
-      if (verify.session == null) {
-        return AuthResult.failure('Mot de passe actuel incorrect.');
-      }
-
-      await _supabase.auth.updateUser(UserAttributes(password: newPassword));
-      return AuthResult.success(
-          message: 'Mot de passe modifié avec succès.');
-    } on AuthException catch (e) {
-      return AuthResult.failure(_mapAuthError(e.message));
-    } catch (_) {
+    // Validation côté client uniquement — l'appel réseau se fait dans l'écran
+    if (newPassword.length < 8) {
       return AuthResult.failure(
-          'Erreur lors du changement de mot de passe.');
-    } finally {
-      _setLoading(false);
+          'Nouveau mot de passe: 8 caractères minimum.');
     }
+    if (newPassword == currentPassword) {
+      return AuthResult.failure(
+          'Le nouveau mot de passe doit être différent de l\'ancien.');
+    }
+    // Signal que la validation côté client est OK — l'écran appelle ensuite l'API
+    return AuthResult.success(message: 'validation_ok');
   }
 
   // ── Refresh token ──────────────────────────────────────────────────────────

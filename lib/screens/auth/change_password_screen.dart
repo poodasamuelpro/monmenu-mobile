@@ -1,7 +1,12 @@
 // lib/screens/auth/change_password_screen.dart
+// Changement de mot de passe pour un utilisateur connecté.
+// Appelle POST /api/v1/dashboard/profil/change-password via ApiService (Bearer token).
+// Body : { current_password, new_password }
+// Réponse : { success, message } | { error } (401 = mdp actuel incorrect)
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
+import '../../services/api_service.dart';
 import '../../services/auth_service.dart';
 import '../../theme/app_theme.dart';
 
@@ -36,25 +41,49 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
 
     setState(() { _isSubmitting = true; _error = null; });
 
+    // Récupérer les services AVANT les gaps async (lint use_build_context_synchronously)
     final auth = context.read<AuthService>();
-    final result = await auth.changePassword(
+    final api = context.read<ApiService>();
+
+    // Étape 1 : validation côté client via AuthService
+    final validationResult = await auth.changePassword(
       currentPassword: _currentCtrl.text,
       newPassword: _newCtrl.text,
+    );
+
+    if (!validationResult.success) {
+      if (!mounted) return;
+      setState(() { _isSubmitting = false; _error = validationResult.message; });
+      return;
+    }
+
+    // Étape 2 : appel API POST /dashboard/profil/change-password via ApiService
+    // (Bearer token inclus automatiquement par ApiService._headers)
+    final resp = await api.post(
+      '/dashboard/profil/change-password',
+      {
+        'current_password': _currentCtrl.text,
+        'new_password': _newCtrl.text,
+      },
     );
 
     if (!mounted) return;
     setState(() => _isSubmitting = false);
 
-    if (result.success) {
+    if (resp.success) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Mot de passe modifié avec succès.'),
+        SnackBar(
+          content: Text(
+            resp.data?['message'] as String? ?? 'Mot de passe modifié avec succès.',
+          ),
           backgroundColor: AppColors.success,
         ),
       );
       context.pop();
     } else {
-      setState(() => _error = result.message);
+      // 401 = mot de passe actuel incorrect
+      // 422 = règle de format non respectée
+      setState(() => _error = resp.error ?? 'Erreur lors du changement de mot de passe.');
     }
   }
 
