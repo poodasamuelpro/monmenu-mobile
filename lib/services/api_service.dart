@@ -43,6 +43,42 @@ class ApiService {
     ));
   }
 
+  // ── POST sans Bearer (routes publiques d'authentification) ─────────────────
+  // Utilisé pour : forgot-password, verify-otp (routes /auth/* non authentifiées)
+  // N'ajoute PAS de header Authorization — évite d'envoyer le token de session
+  // d'un utilisateur potentiellement connecté sur une route publique.
+  Future<ApiResponse> postPublic(String endpoint, Map<String, dynamic> body) async {
+    return _request(() => _client.post(
+      _buildUri(endpoint),
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+      },
+      body: jsonEncode(body),
+    ));
+  }
+
+  // ── POST avec Bearer personnalisé (token OTP temporaire) ──────────────────
+  // Utilisé pour : reset-password après vérification OTP
+  // Le token Bearer fourni est l'access_token renvoyé par /auth/verify-otp,
+  // distinct du token de session de l'utilisateur connecté.
+  // SEC : le token n'est jamais loggé.
+  Future<ApiResponse> postWithBearer(
+    String endpoint,
+    Map<String, dynamic> body, {
+    required String bearer,
+  }) async {
+    return _request(() => _client.post(
+      _buildUri(endpoint),
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+        'Authorization': 'Bearer $bearer',
+      },
+      body: jsonEncode(body),
+    ));
+  }
+
   // ── PATCH ──────────────────────────────────────────────────────────────────
   Future<ApiResponse> patch(String endpoint, Map<String, dynamic> body) async {
     return _request(() => _client.patch(
@@ -212,9 +248,12 @@ class ApiService {
   Future<ApiResponse> createCodePromo(Map<String, dynamic> data) async =>
       post('/dashboard/codes-promo', data);
 
-  // ⚠️  updateCodePromo() SUPPRIMÉ : PATCH /dashboard/codes-promo/:id n'existe pas côté backend.
-  //     AUDIT-S5 FIX-A : le backend ne propose que POST (créer) et DELETE (supprimer) pour les codes promo.
-  //     Le toggle actif via PATCH n'est pas supporté — voir codes_promo_screen.dart pour le workaround UI.
+  /// PATCH /dashboard/codes-promo/:id — Activer / désactiver un code promo
+  /// Body : { actif: bool } → Réponse : { success: true, actif: 0|1 }
+  /// Route ajoutée côté backend (déployée en production, confirmée le 2025-01-10).
+  /// Anciennement supprimée (AUDIT-S5 FIX-A) car inexistante — maintenant disponible.
+  Future<ApiResponse> updateCodePromoActif(String id, bool actif) async =>
+      patch('/dashboard/codes-promo/$id', {'actif': actif});
 
   /// DELETE /dashboard/codes-promo/:id
   Future<ApiResponse> deleteCodePromo(String id) async =>

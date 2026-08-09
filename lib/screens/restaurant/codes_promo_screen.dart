@@ -42,18 +42,52 @@ class _CodesPromoScreenState extends State<CodesPromoScreen> {
     }
   }
 
-  // AUDIT-S5 FIX-A : PATCH /dashboard/codes-promo/:id n'existe PAS côté backend.
-  // Le backend ne fournit que POST (créer) et DELETE (supprimer) pour les codes promo.
-  // Le toggle actif/inactif n'est pas supporté par l'API actuelle.
-  // UI : le Switch est désactivé et un message explicatif est affiché.
-  void _toggleActif(CodePromoModel promo) {
-    _showSnack(
-      'Modification non disponible : le serveur ne supporte pas la mise à jour des codes promo. Supprimez et recréez le code si nécessaire.',
-      isError: true,
-    );
+  // ROUTE RÉACTIVÉE : PATCH /dashboard/codes-promo/:id est désormais disponible en production.
+  // Anciennement désactivé (AUDIT-S5 FIX-A) car inexistant — maintenant corrigé côté backend.
+  Future<void> _toggleActif(CodePromoModel promo) async {
+    // Récupérer api AVANT tout gap async (lint use_build_context_synchronously)
+    final api = context.read<ApiService>();
+
+    // Optimistic update immédiat dans la liste locale
+    final indexPromo = _promos.indexWhere((p) => p.id == promo.id);
+    if (indexPromo < 0) return;
+    final nouvelEtat = !promo.actif;
+
+    setState(() {
+      _promos[indexPromo] = CodePromoModel(
+        id: promo.id,
+        tenantId: promo.tenantId,
+        code: promo.code,
+        typeReduction: promo.typeReduction,
+        valeur: promo.valeur,
+        dateExpiration: promo.dateExpiration,
+        maxUtilisations: promo.maxUtilisations,
+        utilisationsActuelles: promo.utilisationsActuelles,
+        actif: nouvelEtat,
+        minCommande: promo.minCommande,
+        createdAt: promo.createdAt,
+      );
+    });
+
+    final resp = await api.updateCodePromoActif(promo.id, nouvelEtat);
+    if (!mounted) return;
+
+    if (!resp.success) {
+      // Rollback si erreur
+      setState(() {
+        _promos[indexPromo] = promo; // restaurer l'état original
+      });
+      _showSnack(resp.error ?? 'Erreur lors de la mise à jour', isError: true);
+    } else {
+      _showSnack(
+        nouvelEtat ? 'Code promo activé' : 'Code promo désactivé',
+      );
+    }
   }
 
   Future<void> _delete(CodePromoModel promo) async {
+    // Récupérer api AVANT le gap async showDialog (lint use_build_context_synchronously)
+    final api = context.read<ApiService>();
     final confirm = await showDialog<bool>(
       context: context,
       builder: (_) => AlertDialog(
@@ -71,7 +105,6 @@ class _CodesPromoScreenState extends State<CodesPromoScreen> {
     );
     if (confirm != true) return;
 
-    final api = context.read<ApiService>();
     final resp = await api.deleteCodePromo(promo.id);
     if (!mounted) return;
     if (resp.success) {
@@ -233,14 +266,11 @@ class _PromoCard extends StatelessWidget {
             ),
             const Spacer(),
             if (!promo.isExpire && !promo.isEpuise)
-              Tooltip(
-                message: 'Modification non disponible via l\'API actuelle',
-                child: Switch(
-                  value: promo.actif,
-                  onChanged: null, // désactivé : PATCH /codes-promo/:id inexistant côté backend
-                  activeThumbColor: Colors.white,
-                  activeTrackColor: AppColors.success,
-                ),
+              Switch(
+                value: promo.actif,
+                onChanged: (_) => onToggle(),
+                activeThumbColor: Colors.white,
+                activeTrackColor: AppColors.success,
               ),
           ]),
 
