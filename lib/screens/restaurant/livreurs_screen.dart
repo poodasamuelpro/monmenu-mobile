@@ -384,17 +384,18 @@ class _LivreurDialogState extends State<_LivreurDialog> {
     setState(() => _isLoading = true);
 
     final api = context.read<ApiService>();
-    // API: nom (requis) + whatsapp_number (requis à la création)
-    final payload = <String, dynamic>{
-      'nom': _nomCtrl.text.trim(),
-      'whatsapp_number': _whatsappCtrl.text.trim(),
-      if (_isEdit) 'actif': _actif,
-    };
 
     ApiResponse resp;
     if (_isEdit) {
-      resp = await api.updateLivreur(widget.livreur!.id, payload);
+      // En mode édition : le backend PATCH /livreurs/:id ne lit QUE 'actif'.
+      // Envoyer seulement ce champ pour éviter toute confusion.
+      resp = await api.updateLivreur(widget.livreur!.id, {'actif': _actif});
     } else {
+      // Création : nom + whatsapp_number requis
+      final payload = <String, dynamic>{
+        'nom': _nomCtrl.text.trim(),
+        'whatsapp_number': _whatsappCtrl.text.trim(),
+      };
       resp = await api.createLivreur(payload);
     }
 
@@ -422,40 +423,66 @@ class _LivreurDialogState extends State<_LivreurDialog> {
         child: Form(
           key: _formKey,
           child: Column(mainAxisSize: MainAxisSize.min, children: [
-            // Nom
-            TextFormField(
-              controller: _nomCtrl,
-              decoration: InputDecoration(
-                labelText: 'Nom complet *',
-                prefixIcon: const Icon(Icons.person_rounded, size: 18, color: AppColors.gray400),
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+            if (!_isEdit) ...[
+              // ── Création : champs nom + WhatsApp requis ────────────────
+              TextFormField(
+                controller: _nomCtrl,
+                decoration: InputDecoration(
+                  labelText: 'Nom complet *',
+                  prefixIcon: const Icon(Icons.person_rounded, size: 18, color: AppColors.gray400),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                ),
+                validator: (v) => (v == null || v.trim().length < 2) ? 'Nom requis (2 caractères min)' : null,
               ),
-              validator: (v) => (v == null || v.trim().length < 2) ? 'Nom requis (2 caractères min)' : null,
-            ),
-            const SizedBox(height: 12),
-
-            // WhatsApp
-            TextFormField(
-              controller: _whatsappCtrl,
-              keyboardType: TextInputType.phone,
-              decoration: InputDecoration(
-                labelText: 'Numéro WhatsApp *',
-                hintText: '+22612345678',
-                prefixIcon: const Icon(Icons.chat_rounded, size: 18, color: AppColors.gray400),
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+              const SizedBox(height: 12),
+              TextFormField(
+                controller: _whatsappCtrl,
+                keyboardType: TextInputType.phone,
+                decoration: InputDecoration(
+                  labelText: 'Numéro WhatsApp *',
+                  hintText: '+22612345678',
+                  prefixIcon: const Icon(Icons.chat_rounded, size: 18, color: AppColors.gray400),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                ),
+                validator: (v) {
+                  if (v == null || v.trim().isEmpty) return 'Numéro WhatsApp requis';
+                  final clean = v.replaceAll(RegExp(r'[\s\-]'), '');
+                  if (clean.length < 8) return 'Numéro invalide (min 8 chiffres)';
+                  return null;
+                },
               ),
-              validator: (v) {
-                if (v == null || v.trim().isEmpty) return 'Numéro WhatsApp requis';
-                final clean = v.replaceAll(RegExp(r'[\s\-]'), '');
-                if (clean.length < 8) return 'Numéro invalide (min 8 chiffres)';
-                return null;
-              },
-            ),
-
-            if (_isEdit) ...[
-              const SizedBox(height: 8),
+            ] else ...[
+              // ── Édition : seul le statut actif/inactif est modifiable ──
+              // Le backend PATCH /livreurs/:id ne lit que le champ 'actif'.
+              // Les champs nom et whatsapp_number sont ignorés silencieusement.
+              Container(
+                padding: const EdgeInsets.all(10),
+                margin: const EdgeInsets.only(bottom: 12),
+                decoration: BoxDecoration(
+                  color: AppColors.gray100,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  const Row(children: [
+                    Icon(Icons.info_outline_rounded, size: 14, color: AppColors.gray500),
+                    SizedBox(width: 6),
+                    Expanded(child: Text(
+                      'Seul le statut actif/inactif peut être modifié.\nPour changer le nom ou le numéro, supprimez et recréez le livreur.',
+                      style: TextStyle(fontSize: 11, color: AppColors.gray500),
+                    )),
+                  ]),
+                  const SizedBox(height: 8),
+                  Text('Nom : ${widget.livreur!.nom}',
+                      style: const TextStyle(fontSize: 13, color: AppColors.gray700, fontWeight: FontWeight.w500)),
+                  if (widget.livreur!.whatsappNumber != null) ...[
+                    const SizedBox(height: 2),
+                    Text('WhatsApp : ${widget.livreur!.whatsappNumber}',
+                        style: const TextStyle(fontSize: 13, color: AppColors.gray700)),
+                  ],
+                ]),
+              ),
               SwitchListTile(
                 title: const Text('Actif', style: TextStyle(fontSize: 14)),
                 value: _actif,
@@ -481,7 +508,7 @@ class _LivreurDialogState extends State<_LivreurDialog> {
           ),
           child: _isLoading
               ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-              : Text(_isEdit ? 'Modifier' : 'Ajouter'),
+              : Text(_isEdit ? 'Enregistrer' : 'Ajouter'),
         ),
       ],
     );
