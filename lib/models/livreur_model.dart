@@ -62,11 +62,16 @@ class CodePromoModel {
   final String id;
   final String tenantId;
   final String code;
-  final String typeReduction; // 'pourcentage' | 'montant_fixe'
+  /// Type de réduction — champ API : 'type' (valeurs: 'pourcentage' | 'montant_fixe')
+  final String typeReduction;
   final double valeur;
+  /// Pas supporté par le backend — toujours null côté API
   final double? minCommande;
+  /// Nombre max d'utilisations — champ API : 'usage_max'
   final int? maxUtilisations;
+  /// Utilisations actuelles — champ API : 'usage_actuel'
   final int utilisationsActuelles;
+  /// Date de fin de validité — champ API : 'date_fin'
   final DateTime? dateExpiration;
   final bool actif;
   final DateTime? createdAt;
@@ -90,13 +95,18 @@ class CodePromoModel {
       id: json['id'] as String? ?? '',
       tenantId: json['tenant_id'] as String? ?? '',
       code: json['code'] as String? ?? '',
-      typeReduction: json['type_reduction'] as String? ?? 'pourcentage',
+      // Backend retourne 'type' (pas 'type_reduction')
+      typeReduction: json['type'] as String? ?? 'pourcentage',
       valeur: _toDouble(json['valeur']),
-      minCommande: _toDoubleNullable(json['min_commande']),
-      maxUtilisations: (json['max_utilisations'] as num?)?.toInt(),
-      utilisationsActuelles: (json['utilisations_actuelles'] as num?)?.toInt() ?? 0,
-      dateExpiration: json['date_expiration'] != null
-          ? DateTime.tryParse(json['date_expiration'] as String)
+      // 'min_commande' n'existe pas côté backend — toujours null
+      minCommande: null,
+      // Backend retourne 'usage_max' (pas 'max_utilisations')
+      maxUtilisations: (json['usage_max'] as num?)?.toInt(),
+      // Backend retourne 'usage_actuel' (pas 'utilisations_actuelles')
+      utilisationsActuelles: (json['usage_actuel'] as num?)?.toInt() ?? 0,
+      // Backend retourne 'date_fin' (pas 'date_expiration')
+      dateExpiration: json['date_fin'] != null
+          ? DateTime.tryParse(json['date_fin'] as String)
           : null,
       actif: json['actif'] as bool? ?? true,
       createdAt: json['created_at'] != null
@@ -119,12 +129,15 @@ class CodePromoModel {
 
   Map<String, dynamic> toJson() => {
     'code': code,
-    'type_reduction': typeReduction,
+    // Backend attend 'type' (pas 'type_reduction')
+    'type': typeReduction,
     'valeur': valeur,
-    'min_commande': minCommande,
-    'max_utilisations': maxUtilisations,
-    'date_expiration': dateExpiration?.toIso8601String(),
+    // Backend attend 'usage_max' (pas 'max_utilisations')
+    if (maxUtilisations != null) 'usage_max': maxUtilisations,
+    // Backend attend 'date_fin' (pas 'date_expiration')
+    if (dateExpiration != null) 'date_fin': dateExpiration!.toIso8601String(),
     'actif': actif,
+    // 'min_commande' n'est pas supporté côté backend — ne pas l'envoyer
   };
 
   String get reductionFormatee => typeReduction == 'pourcentage'

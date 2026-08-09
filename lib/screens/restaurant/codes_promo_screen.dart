@@ -32,8 +32,8 @@ class _CodesPromoScreenState extends State<CodesPromoScreen> {
     final resp = await api.getCodesPromo();
     if (!mounted) return;
     if (resp.success) {
-      final list = (resp.data?['codes_promo'] as List? ??
-          resp.data?['data'] as List? ?? [])
+      // Backend renvoie { codes: [...] } — clé confirmée dans api-dashboard.ts
+      final list = (resp.data?['codes'] as List? ?? [])
           .map((j) => CodePromoModel.fromJson(j as Map<String, dynamic>))
           .toList();
       setState(() { _promos = list; _isLoading = false; });
@@ -332,7 +332,6 @@ class _PromoDialogState extends State<_PromoDialog> {
   final _formKey = GlobalKey<FormState>();
   final _codeCtrl = TextEditingController();
   final _valeurCtrl = TextEditingController();
-  final _minCommandeCtrl = TextEditingController();
   final _maxUtilCtrl = TextEditingController();
   String _typeReduction = 'pourcentage';
   DateTime? _dateExpiration;
@@ -341,7 +340,7 @@ class _PromoDialogState extends State<_PromoDialog> {
   @override
   void dispose() {
     _codeCtrl.dispose(); _valeurCtrl.dispose();
-    _minCommandeCtrl.dispose(); _maxUtilCtrl.dispose();
+    _maxUtilCtrl.dispose();
     super.dispose();
   }
 
@@ -368,16 +367,18 @@ class _PromoDialogState extends State<_PromoDialog> {
     setState(() => _isLoading = true);
 
     final api = context.read<ApiService>();
+    // Noms de champs conformes à l'API backend (api-dashboard.ts) :
+    //   'type'       au lieu de 'type_reduction'
+    //   'usage_max'  au lieu de 'max_utilisations'
+    //   'date_fin'   au lieu de 'date_expiration'
+    // 'min_commande' n'est pas supporté côté backend — retiré de la requête
     final payload = {
       'code': _codeCtrl.text.trim().toUpperCase(),
-      'type_reduction': _typeReduction,
+      'type': _typeReduction,
       'valeur': double.tryParse(_valeurCtrl.text) ?? 0,
-      if (_minCommandeCtrl.text.trim().isNotEmpty)
-        'min_commande': double.tryParse(_minCommandeCtrl.text),
       if (_maxUtilCtrl.text.trim().isNotEmpty)
-        'max_utilisations': int.tryParse(_maxUtilCtrl.text),
-      if (_dateExpiration != null) 'date_expiration': _dateExpiration!.toIso8601String(),
-      'actif': true,
+        'usage_max': int.tryParse(_maxUtilCtrl.text),
+      if (_dateExpiration != null) 'date_fin': _dateExpiration!.toIso8601String(),
     };
 
     final resp = await api.createCodePromo(payload);
@@ -482,16 +483,21 @@ class _PromoDialogState extends State<_PromoDialog> {
 
             const SizedBox(height: 12),
 
-            // Commande minimum
-            TextFormField(
-              controller: _minCommandeCtrl,
-              keyboardType: const TextInputType.numberWithOptions(decimal: true),
-              decoration: InputDecoration(
-                labelText: 'Montant min. commande (FCFA)',
-                prefixIcon: const Icon(Icons.shopping_cart_rounded, size: 18, color: AppColors.gray400),
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+            // Note : montant min. commande non supporté par le serveur
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: AppColors.gray100,
+                borderRadius: BorderRadius.circular(8),
               ),
+              child: const Row(children: [
+                Icon(Icons.info_outline_rounded, size: 14, color: AppColors.gray500),
+                SizedBox(width: 8),
+                Expanded(child: Text(
+                  'Le montant minimum de commande n\'est pas encore disponible. Fonctionnalité à venir.',
+                  style: TextStyle(fontSize: 11, color: AppColors.gray500),
+                )),
+              ]),
             ),
 
             const SizedBox(height: 12),
