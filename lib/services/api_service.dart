@@ -153,8 +153,12 @@ class ApiService {
   /// GET /dashboard/menu
   Future<ApiResponse> getMenu() async => get('/dashboard/menu');
 
-  /// GET /dashboard/categories
-  Future<ApiResponse> getCategories() async => get('/dashboard/categories');
+  /// GET /dashboard/menu — retourne catégories + produits dans { categories: [...] }
+  /// AUDIT-S5 FIX-B : GET /dashboard/categories n'existe pas côté backend.
+  /// Le backend expose GET /dashboard/menu qui retourne les catégories avec leurs produits.
+  /// getCategories() est supprimé — utiliser getMenu() à la place.
+  // ⚠️  getCategories() SUPPRIMÉ : endpoint /dashboard/categories inexistant côté backend
+  //     Utiliser getMenu() → GET /dashboard/menu qui retourne { categories: [...] }
 
   /// POST /dashboard/categories
   Future<ApiResponse> createCategorie(Map<String, dynamic> data) async =>
@@ -208,9 +212,9 @@ class ApiService {
   Future<ApiResponse> createCodePromo(Map<String, dynamic> data) async =>
       post('/dashboard/codes-promo', data);
 
-  /// PATCH /dashboard/codes-promo/:id
-  Future<ApiResponse> updateCodePromo(String id, Map<String, dynamic> data) async =>
-      patch('/dashboard/codes-promo/$id', data);
+  // ⚠️  updateCodePromo() SUPPRIMÉ : PATCH /dashboard/codes-promo/:id n'existe pas côté backend.
+  //     AUDIT-S5 FIX-A : le backend ne propose que POST (créer) et DELETE (supprimer) pour les codes promo.
+  //     Le toggle actif via PATCH n'est pas supporté — voir codes_promo_screen.dart pour le workaround UI.
 
   /// DELETE /dashboard/codes-promo/:id
   Future<ApiResponse> deleteCodePromo(String id) async =>
