@@ -268,7 +268,7 @@ class NotificationService extends ChangeNotifier {
         break;
       case 'en_attente_confirmation':
         title = '⏳ Preuve reçue';
-        body = 'Votre preuve de paiement a été reçue. Confirmation sous 38h.';
+        body = 'Votre preuve de paiement a été reçue. Confirmation sous 48h.';
         break;
       default:
         return;

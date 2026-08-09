@@ -290,7 +290,7 @@ class _CurrentSubscriptionCard extends StatelessWidget {
       case 'actif':
         return 'Abonnement actif ✓';
       case 'en_attente_confirmation':
-        return '⏳ Paiement soumis — confirmation sous 38h';
+        return '⏳ Paiement soumis — confirmation sous 48h';
       case 'inactif':
         return 'Abonnement expiré — Renouvelez pour accéder';
       case 'suspendu':
@@ -312,7 +312,7 @@ class _EnAttenteCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final heures = (abonnement?['heures_restantes_confirmation'] as num?)?.toInt()
         ?? _calcHeuresRestantes(abonnement?['delai_confirmation_expire_le']);
-    final message = abonnement?['message_38h'] as String?;
+    final message = abonnement?['message_confirmation'] as String?;
 
     return Container(
       padding: const EdgeInsets.all(16),
@@ -361,7 +361,7 @@ class _EnAttenteCard extends StatelessWidget {
           const SizedBox(height: 10),
           const Text(
             'Vous avez 72h pour effectuer le paiement après réception de la référence. '
-            'L\'équipe admin a 38h pour confirmer après soumission de votre preuve.',
+            'L\'équipe admin a 48h pour confirmer après soumission de votre preuve.',
             style: TextStyle(fontSize: 11, color: Colors.orange, height: 1.4),
           ),
         ],
@@ -515,7 +515,7 @@ class _PaymentInfoCard extends StatelessWidget {
                 '   • Carte bancaire Visa/Mastercard\n'
                 '3. Prenez une photo de votre reçu\n'
                 '4. Cliquez sur "J\'ai effectué le paiement" et uploadez la preuve\n'
-                '5. L\'équipe confirme sous 38h',
+                '5. L\'équipe confirme sous 48h',
                 style: TextStyle(
                     fontSize: 12, color: AppColors.gray600, height: 1.7),
               ),

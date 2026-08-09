@@ -114,7 +114,7 @@ class AbonnementModel {
   /// Motif du rejet.
   final String? motifRejet;
 
-  /// Délai d'expiration de la confirmation (38h après soumission).
+  /// Délai d'expiration de la confirmation (48h SLA après soumission).
   final DateTime? delaiConfirmationExpireLe;
 
   /// Heures restantes avant expiration du délai.
@@ -196,7 +196,7 @@ class AbonnementModel {
     return finLe!.difference(DateTime.now()).inDays;
   }
 
-  /// Heures avant expiration du délai de confirmation admin (38h).
+  /// Heures avant expiration du délai de confirmation admin (48h SLA).
   int get heuresAvantExpirationAdmin {
     if (heuresRestantesConfirmation != null) {
       return heuresRestantesConfirmation!;

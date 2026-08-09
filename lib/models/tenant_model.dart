@@ -10,14 +10,14 @@ class PaiementEnAttenteModel {
   /// Date de soumission de la preuve de paiement.
   final DateTime soumisLe;
 
-  /// Délai d'expiration de la confirmation admin (38h après soumission).
+  /// Délai d'expiration de la confirmation admin (48h SLA après soumission).
   final DateTime? delaiConfirmationExpireLe;
 
   /// Nombre d'heures restantes avant expiration du délai de confirmation.
   final int? heuresRestantes;
 
   /// Message explicatif envoyé par le serveur.
-  final String? message38h;
+  final String? messageConfirmation;
 
   /// ID de l'abonnement en cours de traitement.
   final String? abonnementId;
@@ -27,7 +27,7 @@ class PaiementEnAttenteModel {
     required this.soumisLe,
     this.delaiConfirmationExpireLe,
     this.heuresRestantes,
-    this.message38h,
+    this.messageConfirmation,
     this.abonnementId,
   });
 
@@ -41,7 +41,7 @@ class PaiementEnAttenteModel {
           ? DateTime.tryParse(json['delai_confirmation_expire_le'] as String)
           : null,
       heuresRestantes: (json['heures_restantes_confirmation'] as num?)?.toInt(),
-      message38h: json['message_38h'] as String?,
+      messageConfirmation: json['message_confirmation'] as String?,
       abonnementId: json['id'] as String?,
     );
   }
@@ -51,7 +51,7 @@ class PaiementEnAttenteModel {
     'soumis_le': soumisLe.toIso8601String(),
     'delai_confirmation_expire_le': delaiConfirmationExpireLe?.toIso8601String(),
     'heures_restantes_confirmation': heuresRestantes,
-    'message_38h': message38h,
+    'message_confirmation': messageConfirmation,
     'id': abonnementId,
   };
 
@@ -169,7 +169,7 @@ class TenantModel {
   bool get isEnAttenteConfirmation => statut == 'en_attente_confirmation';
 
   /// SEC-04 : le statut 'en_attente_confirmation' donne accès à l'app
-  /// (le restaurant peut continuer à opérer pendant les 38h de traitement).
+  /// (le restaurant peut continuer à opérer pendant les 48h SLA de traitement).
   bool get canAccess =>
       statut == 'actif' ||
       statut == 'essai' ||

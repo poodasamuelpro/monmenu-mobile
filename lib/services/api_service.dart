@@ -239,7 +239,7 @@ class ApiService {
   /// GET /paiement/statut
   /// Retourne : {statut_tenant, abonnement{id, statut, reference_paiement,
   /// soumis_le, delai_confirmation_expire_le, heures_restantes_confirmation,
-  /// message_38h}, essai_expire_le, jours_essai_restants, reference_active}
+  /// message_confirmation}, essai_expire_le, jours_essai_restants, reference_active}
   Future<ApiResponse> getAbonnementActif() async =>
       get('/paiement/statut');
 
