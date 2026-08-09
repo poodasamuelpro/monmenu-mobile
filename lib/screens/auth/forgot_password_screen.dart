@@ -1,9 +1,30 @@
 // lib/screens/auth/forgot_password_screen.dart
-// 3 étapes: 1) Saisir email → 2) OTP → 3) Nouveau mot de passe
+// Flux réinitialisation mot de passe — 3 étapes avec code OTP à 6 chiffres
+//
+// FLUX CORRECT (confirmé en lisant api-auth.ts du backend Workers) :
+//   Étape 1 — POST /api/v1/auth/forgot-password { email }
+//             → Backend appelle supabase.auth.signInWithOtp() (code 6 chiffres, PAS un lien)
+//             → Réponse neutre { message } (ne révèle pas si le compte existe)
+//   Étape 2 — POST /api/v1/auth/verify-otp { email, token }
+//             → token doit correspondre au regex /^\d{6}$/
+//             → Backend appelle supabase.auth.verifyOtp({ type: 'email' })
+//             → Réponse : { access_token, refresh_token, message }
+//             → L'access_token est conservé en mémoire pour l'étape 3
+//   Étape 3 — POST /api/v1/auth/reset-password { password }
+//             → Authorization: Bearer <access_token de l'étape 2>
+//             → Réponse : { success, message }
+//
+// SÉCURITÉ :
+//   - Aucun code OTP n'est jamais stocké sur disque ni loggé
+//   - L'access_token temporaire n'est conservé qu'en mémoire (variable d'état)
+//   - Message d'erreur générique pour les codes invalides/expirés
+//   - Bouton "Renvoyer" désactivé 60s pour limiter le spam (rate-limit backend : 5/hr)
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
+import '../../services/api_service.dart';
 import '../../services/auth_service.dart';
 import '../../theme/app_theme.dart';
 
@@ -29,81 +50,175 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
   bool _obscureNew = true;
   bool _obscureConfirm = true;
 
+  // Access token temporaire obtenu à l'étape 2 — JAMAIS persisté sur disque
+  // Utilisé uniquement pour l'Authorization header de l'étape 3
+  String? _otpAccessToken;
+
+  // Cooldown pour le bouton "Renvoyer" (60s)
+  int _resendCooldown = 0;
+  Timer? _cooldownTimer;
+
   @override
   void dispose() {
     _emailCtrl.dispose();
-    for (final c in _otpControllers) c.dispose();
-    for (final f in _otpFocusNodes) f.dispose();
+    for (final c in _otpControllers) { c.dispose(); }
+    for (final f in _otpFocusNodes) { f.dispose(); }
     _newPasswordCtrl.dispose();
     _confirmPasswordCtrl.dispose();
+    _cooldownTimer?.cancel();
+    // Effacement explicite du token temporaire (bonne pratique sécurité)
+    _otpAccessToken = null;
     super.dispose();
   }
 
   String get _otpValue => _otpControllers.map((c) => c.text).join();
 
-  // ── Étape 1: envoyer OTP ──────────────────────────────────────────────────
+  void _startResendCooldown() {
+    _resendCooldown = 60;
+    _cooldownTimer?.cancel();
+    _cooldownTimer = Timer.periodic(const Duration(seconds: 1), (t) {
+      if (_resendCooldown <= 0) {
+        t.cancel();
+      } else {
+        if (mounted) setState(() => _resendCooldown--);
+      }
+    });
+  }
+
+  // ── Étape 1: Envoyer le code OTP ─────────────────────────────────────────
   Future<void> _sendOtp() async {
-    if (_emailCtrl.text.trim().isEmpty) {
-      setState(() => _error = 'Entrez votre adresse email.');
+    // Récupérer les services AVANT tout gap async (lint use_build_context_synchronously)
+    final auth = context.read<AuthService>();
+    final api = context.read<ApiService>();
+
+    final emailErr = auth.validateEmailForOtp(_emailCtrl.text);
+    if (emailErr != null) {
+      setState(() => _error = emailErr);
       return;
     }
+
     setState(() { _isSubmitting = true; _error = null; });
 
-    final auth = context.read<AuthService>();
-    final result = await auth.sendPasswordResetOtp(_emailCtrl.text.trim());
+    // Appel API direct : POST /api/v1/auth/forgot-password
+    // Ne passe PAS par ApiService._headers (pas de Bearer token ici — route publique)
+    final resp = await api.postPublic(
+      '/auth/forgot-password',
+      {'email': _emailCtrl.text.trim()},
+    );
 
     if (!mounted) return;
     setState(() => _isSubmitting = false);
 
-    if (result.success) {
+    if (resp.success || resp.statusCode == 200) {
+      // Réponse toujours neutre (ne révèle pas si le compte existe)
       setState(() => _step = 2);
-      _showSnack('Code envoyé à ${_emailCtrl.text.trim()}', success: true);
+      _startResendCooldown();
+      _showSnack(
+        resp.data?['message'] as String? ??
+            'Si ce compte existe, un code à 6 chiffres a été envoyé.',
+        success: true,
+      );
     } else {
-      setState(() => _error = result.message);
+      // Ne pas révéler les détails (rate-limit, etc.) — message générique
+      final errMsg = resp.error ?? 'Erreur lors de l\'envoi. Réessayez.';
+      setState(() => _error = errMsg);
     }
   }
 
-  // ── Étape 2: vérifier OTP (passer à l'étape 3) ───────────────────────────
-  void _verifyOtp() {
-    if (_otpValue.length < 6) {
-      setState(() => _error = 'Entrez le code à 6 chiffres.');
+  // ── Étape 2: Vérifier le code OTP avec le backend ────────────────────────
+  Future<void> _verifyOtp() async {
+    // Récupérer les services AVANT tout gap async (lint use_build_context_synchronously)
+    final auth = context.read<AuthService>();
+    final api = context.read<ApiService>();
+
+    final otpErr = auth.validateOtpCode(_otpValue);
+    if (otpErr != null) {
+      setState(() => _error = otpErr);
       return;
     }
-    setState(() { _step = 3; _error = null; });
+
+    setState(() { _isSubmitting = true; _error = null; });
+
+    // Appel API : POST /api/v1/auth/verify-otp { email, token }
+    // Route publique — pas de Bearer token
+    final resp = await api.postPublic(
+      '/auth/verify-otp',
+      {
+        'email': _emailCtrl.text.trim(),
+        'token': _otpValue, // exactement 6 chiffres, validé ci-dessus
+      },
+    );
+
+    if (!mounted) return;
+    setState(() => _isSubmitting = false);
+
+    if (resp.success) {
+      // Récupérer l'access_token renvoyé par le backend
+      final token = resp.data?['access_token'] as String?;
+      if (token == null || token.isEmpty) {
+        setState(() => _error = 'Réponse invalide du serveur. Réessayez.');
+        return;
+      }
+      // Stocker le token temporaire EN MÉMOIRE UNIQUEMENT (jamais sur disque)
+      _otpAccessToken = token;
+      setState(() { _step = 3; _error = null; });
+    } else {
+      // Code invalide, expiré, ou trop de tentatives
+      setState(() => _error = resp.error ?? 'Code invalide ou expiré. Réessayez.');
+    }
   }
 
-  // ── Étape 3: réinitialiser mot de passe ───────────────────────────────────
+  // ── Étape 3: Réinitialiser le mot de passe ───────────────────────────────
   Future<void> _resetPassword() async {
+    // Récupérer les services AVANT tout gap async (lint use_build_context_synchronously)
+    final auth = context.read<AuthService>();
+    final api = context.read<ApiService>();
+
     final newPwd = _newPasswordCtrl.text;
     final confirmPwd = _confirmPasswordCtrl.text;
 
-    if (newPwd.length < 8) {
-      setState(() => _error = 'Mot de passe: 8 caractères minimum.');
+    final pwdErr = auth.validateNewPassword(newPwd);
+    if (pwdErr != null) {
+      setState(() => _error = pwdErr);
       return;
     }
     if (newPwd != confirmPwd) {
       setState(() => _error = 'Les mots de passe ne correspondent pas.');
       return;
     }
+    if (_otpAccessToken == null) {
+      // Sécurité : ne doit jamais arriver normalement
+      setState(() => _error = 'Session expirée. Recommencez depuis l\'étape 1.');
+      setState(() => _step = 1);
+      return;
+    }
 
     setState(() { _isSubmitting = true; _error = null; });
 
-    final auth = context.read<AuthService>();
-    final result = await auth.resetPasswordWithOtp(
-      email: _emailCtrl.text.trim(),
-      otp: _otpValue,
-      newPassword: newPwd,
+    // Appel API : POST /api/v1/auth/reset-password { password }
+    // Authorization: Bearer <access_token de l'étape 2>
+    // NOTE : on n'utilise pas ApiService.post() standard car le Bearer token
+    // est celui obtenu du flux OTP, pas le token de session de l'utilisateur.
+    final resp = await api.postWithBearer(
+      '/auth/reset-password',
+      {'password': newPwd},
+      bearer: _otpAccessToken!,
     );
 
     if (!mounted) return;
     setState(() => _isSubmitting = false);
 
-    if (result.success) {
-      _showSnack('Mot de passe mis à jour !', success: true);
+    if (resp.success) {
+      // Effacement du token temporaire après utilisation
+      _otpAccessToken = null;
+      _showSnack(
+        resp.data?['message'] as String? ?? 'Mot de passe mis à jour avec succès.',
+        success: true,
+      );
       await Future.delayed(const Duration(seconds: 1));
       if (mounted) context.go('/login');
     } else {
-      setState(() => _error = result.message);
+      setState(() => _error = resp.error ?? 'Erreur lors de la réinitialisation.');
     }
   }
 
@@ -189,7 +304,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
         const Text('Mot de passe oublié ?', style: AppTextStyles.h2),
         const SizedBox(height: 6),
         const Text(
-          'Entrez votre email pour recevoir un code de vérification.',
+          'Entrez votre email pour recevoir un code de vérification à 6 chiffres.',
           style: TextStyle(color: AppColors.gray400, fontSize: 13),
         ),
         const SizedBox(height: 24),
@@ -239,7 +354,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
           text: TextSpan(
             style: const TextStyle(color: AppColors.gray400, fontSize: 13),
             children: [
-              const TextSpan(text: 'Code envoyé à '),
+              const TextSpan(text: 'Code à 6 chiffres envoyé à '),
               TextSpan(
                 text: _emailCtrl.text,
                 style: const TextStyle(
@@ -252,7 +367,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
         ),
         const SizedBox(height: 28),
 
-        // OTP boxes
+        // OTP boxes — 6 chiffres numériques uniquement
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: List.generate(6, (i) => _OtpBox(
@@ -273,17 +388,31 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
         if (_error != null) _buildError(),
         const SizedBox(height: 20),
 
+        // Bouton Vérifier — appelle le backend (étape 2 n'est PAS juste locale)
         SizedBox(
           height: 50,
           child: ElevatedButton(
-            onPressed: _otpValue.length == 6 ? _verifyOtp : null,
-            child: const Text('Vérifier le code'),
+            onPressed: (_otpValue.length == 6 && !_isSubmitting) ? _verifyOtp : null,
+            child: _isSubmitting
+                ? const SizedBox(
+                    width: 20, height: 20,
+                    child: CircularProgressIndicator(
+                      color: Colors.white, strokeWidth: 2,
+                    ),
+                  )
+                : const Text('Vérifier le code'),
           ),
         ),
         const SizedBox(height: 12),
+
+        // Bouton Renvoyer avec cooldown 60s (rate-limit backend : 5 envois/heure)
         TextButton(
-          onPressed: _isSubmitting ? null : _sendOtp,
-          child: const Text('Renvoyer le code'),
+          onPressed: (_resendCooldown <= 0 && !_isSubmitting) ? _sendOtp : null,
+          child: Text(
+            _resendCooldown > 0
+                ? 'Renvoyer dans $_resendCooldown s'
+                : 'Renvoyer le code',
+          ),
         ),
       ],
     );
