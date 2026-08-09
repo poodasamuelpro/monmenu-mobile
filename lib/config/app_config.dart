@@ -9,7 +9,7 @@ class AppConfig {
       '.7TQ79mzG4NUO5Snk3ThfL5jt9Chul9pQrcF4nhlAJKA';
 
   // ── API Backend (Cloudflare Workers) ─────────────────────────────────────
-  static const String apiBaseUrl = 'https://monmenu.app';
+  static const String apiBaseUrl = 'https://monmenu.poodasamuelpro.workers.dev';
   static const String apiVersion = '/api/v1';
 
   static String get apiUrl => '$apiBaseUrl$apiVersion';

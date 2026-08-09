@@ -80,9 +80,15 @@ class ApiService {
       }
 
       return _parseResponse(resp);
-    } on SocketException {
+    } on SocketException catch (e) {
+      debugPrint('[ApiService] SocketException (connexion refusée ou DNS résolu): $e');
       return ApiResponse.failure(0, 'Pas de connexion internet.');
-    } on HttpException {
+    } on http.ClientException catch (e) {
+      // Captures les erreurs réseau HTTP (connexion refusée, timeout réseau, etc.)
+      debugPrint('[ApiService] ClientException (réseau): $e');
+      return ApiResponse.failure(0, 'Erreur réseau : impossible de joindre le serveur.');
+    } on HttpException catch (e) {
+      debugPrint('[ApiService] HttpException: $e');
       return ApiResponse.failure(0, 'Erreur réseau.');
     } catch (e) {
       debugPrint('[ApiService] Error: $e');
