@@ -408,3 +408,193 @@ Signing : release-key.jks (RSA 2048, validité 10 000 jours)
 3. **Montant minimum commande (codes promo)** : le champ `min_commande` n'est pas supporté par le backend. La fonctionnalité est signalée comme "à venir" dans l'UI.
 
 4. **Réinitialisation mot de passe** : les routes `/auth/forgot-password`, `/auth/verify-otp`, `/auth/reset-password` existent côté backend mais ne sont pas encore implémentées dans l'application mobile.
+
+---
+
+## Session du 2025-01-10 — Corrections 2.1 · 2.2 · 3.1 · 3.2
+
+### Contexte
+Corrections rendues possibles après l'ajout de deux nouvelles routes backend
+(déployées côté Cloudflare Workers entre les sessions) et audit complet du
+mécanisme OTP de Supabase Auth utilisé par le backend.
+
+**Routes nouvellement disponibles confirmées en production (HTTP 401 avec header
+CSRF = route existe) :**
+- `PATCH /api/v1/dashboard/codes-promo/:id` — activer/désactiver un code promo
+- `PATCH /api/v1/dashboard/livreurs/:id` (élargi) — modifier nom, whatsapp_number, actif
+- `POST /api/v1/dashboard/profil/change-password` — déjà présente, désormais câblée
+
+**Audit OTP confirmé (lecture de api-auth.ts) :**
+- Backend utilise `supabase.auth.signInWithOtp()` → envoie un **code à 6 chiffres**, jamais un lien
+- `verify-otp` attend `{ email, token }` avec `type: 'email'` (non `OtpType.recovery`)
+- `reset-password` attend `Authorization: Bearer <access_token>` renvoyé par `verify-otp`
+
+---
+
+### Correction 2.1 — Réactivation toggle actif codes promo
+
+**Fichiers modifiés :**
+- `lib/services/api_service.dart`
+- `lib/screens/restaurant/codes_promo_screen.dart`
+
+**Problème :** `PATCH /dashboard/codes-promo/:id` n'existait pas lors de l'audit S5.
+Le switch était désactivé (`onChanged: null`) avec un tooltip d'explication.
+La route a depuis été ajoutée côté backend.
+
+**Correction :**
+1. Ajout de `updateCodePromoActif(String id, bool actif)` dans `ApiService` :
+   ```dart
+   Future<ApiResponse> updateCodePromoActif(String id, bool actif) async =>
+       patch('/dashboard/codes-promo/$id', {'actif': actif});
+   ```
+2. `_toggleActif()` : réécriture avec **optimistic update** + rollback en cas d'erreur.
+3. Suppression du `Tooltip` et restauration de `onChanged: (_) => onToggle()`.
+4. Récupération de `api` en début de méthode (lint `use_build_context_synchronously`).
+
+**Triple-vérification :**
+- `grep "onChanged: null"` → 0 résultat ✅
+- `grep "Modification non disponible"` → 0 résultat ✅
+- Body backend vérifié : `{ actif: bool|0|1 }` → réponse `{ success, actif: 0|1 }` ✅
+
+---
+
+### Correction 2.2 — Restauration édition complète des livreurs
+
+**Fichiers modifiés :**
+- `lib/screens/restaurant/livreurs_screen.dart`
+
+**Problème :** En mode édition, le dialogue `_LivreurDialog` masquait les champs
+`nom` et `whatsapp_number`, affichait un message de limitation, et envoyait uniquement
+`{'actif': _actif}`. La route PATCH était limitée à `actif` seulement.
+La route backend a depuis été élargie pour accepter `nom`, `whatsapp_number` et `actif`
+indépendamment.
+
+**Correction :**
+1. Suppression du bloc `if (!_isEdit) ... else ...` conditionnel.
+2. Champs `nom` (requis) et `WhatsApp` (optionnel en édition) présents dans **les deux modes**.
+3. `_save()` en mode édition : envoi sélectif — seuls les champs modifiés sont inclus :
+   ```dart
+   if (nomTrimmed != widget.livreur!.nom) payload['nom'] = nomTrimmed;
+   if (waTrimmed != (widget.livreur!.whatsappNumber ?? '')) payload['whatsapp_number'] = waTrimmed;
+   ```
+4. Validation côté client conforme aux règles backend :
+   - `nom` : minimum 2 caractères
+   - `whatsapp_number` : regex `^\+?[0-9\s\-]{8,20}$`
+5. Suppression du message de limitation.
+
+**Triple-vérification :**
+- `grep "Seul le statut actif/inactif"` → 0 résultat ✅
+- `grep "supprimez et recréez"` → 0 résultat ✅
+- Validation regex identique à celle du backend (api-dashboard.ts ligne 911) ✅
+
+---
+
+### Correction 3.1 — Changement MDP utilisateur connecté
+
+**Fichiers modifiés :**
+- `lib/screens/auth/change_password_screen.dart`
+- `lib/services/auth_service.dart`
+
+**Problème :** `AuthService.changePassword()` appelait directement le SDK Supabase
+(`signInWithPassword` + `updateUser`) au lieu de passer par le backend Workers.
+La route `POST /api/v1/dashboard/profil/change-password` existait mais n'était pas utilisée.
+
+**Body confirmé (api-dashboard.ts ligne 1236) :**
+```json
+{ "current_password": "...", "new_password": "..." }
+```
+Réponse : `{ "success": true, "message": "Mot de passe mis à jour." }`
+
+**Correction :**
+1. `AuthService.changePassword()` réduite à la validation côté client uniquement
+   (éviter la dépendance circulaire `AuthService ↔ ApiService`).
+2. `change_password_screen.dart` : appel `ApiService.post('/dashboard/profil/change-password', {...})`
+   directement après la validation. Le Bearer token est ajouté automatiquement par `ApiService._headers`.
+3. Gestion des codes d'erreur : 401 = mdp actuel incorrect, 422 = format invalide.
+4. `context.read<ApiService>()` déplacé avant le premier gap async.
+
+**Triple-vérification :**
+- Route testée en production → HTTP 401 (authentification requise, route existe) ✅
+- Body fields `current_password` / `new_password` conformes à api-dashboard.ts ✅
+- Aucun appel `signInWithPassword` / `updateUser` résiduel ✅
+
+---
+
+### Correction 3.2 — Mot de passe oublié (flux OTP 6 chiffres)
+
+**Fichiers modifiés :**
+- `lib/screens/auth/forgot_password_screen.dart` (réécriture complète de la logique)
+- `lib/services/auth_service.dart`
+- `lib/services/api_service.dart` (ajout de `postPublic()` et `postWithBearer()`)
+
+**Problème (double) :**
+1. `AuthService.sendPasswordResetOtp()` appelait `supabase.auth.resetPasswordForEmail()`
+   qui envoie un **lien** — alors que le backend envoie un **code à 6 chiffres**.
+2. `AuthService.resetPasswordWithOtp()` appelait `verifyOTP` avec `OtpType.recovery`
+   alors que le backend utilise `type: 'email'`.
+3. L'étape 2 de `forgot_password_screen.dart` n'appelait **pas le backend** — elle
+   passait directement à l'étape 3 sans vérifier le code.
+4. L'`access_token` nécessaire pour l'étape 3 n'était jamais récupéré.
+
+**Flux correct confirmé (lecture api-auth.ts) :**
+```
+Étape 1 : POST /auth/forgot-password { email }
+          → supabase.signInWithOtp() → code 6 chiffres envoyé
+          → réponse neutre (ne révèle pas l'existence du compte)
+
+Étape 2 : POST /auth/verify-otp { email, token }   ← token = /^\d{6}$/
+          → supabase.verifyOtp({ type: 'email' })
+          → réponse : { access_token, refresh_token, message }
+
+Étape 3 : POST /auth/reset-password { password }
+          → Authorization: Bearer <access_token de l'étape 2>
+          → réponse : { success, message }
+```
+
+**Correction :**
+1. `ApiService.postPublic()` : POST sans Bearer (routes /auth/* publiques).
+2. `ApiService.postWithBearer(bearer: token)` : POST avec Bearer personnalisé (étape 3).
+3. `forgot_password_screen.dart` totalement réécrit :
+   - Étape 2 `_verifyOtp()` : appel réel `POST /auth/verify-otp` → récupère `access_token`.
+   - `_otpAccessToken` stocké **en mémoire uniquement** (jamais sur disque, jamais loggé).
+   - Étape 3 `_resetPassword()` : utilise `postWithBearer(bearer: _otpAccessToken!)`.
+   - Token effacé après utilisation (`_otpAccessToken = null`).
+   - Cooldown 60s sur bouton "Renvoyer" (rate-limit backend : 5/heure/IP).
+4. `AuthService` : méthodes OTP réduites à de la validation côté client uniquement.
+   Ajout de `validateEmailForOtp()`, `validateOtpCode()`, `validateNewPassword()`.
+
+**Sécurité :**
+- OTP jamais loggé ni persisté ✅
+- `access_token` temporaire uniquement en mémoire, effacé après usage ✅
+- Messages d'erreur génériques (ne révèle pas l'existence d'un compte) ✅
+- Cooldown UI 60s aligné sur le rate-limit backend ✅
+
+**Triple-vérification :**
+- `grep "OtpType.recovery"` → 0 occurrence en code actif ✅
+- `grep "resetPasswordForEmail"` → 0 occurrence en code actif ✅
+- `grep "redirectTo"` → 0 résultat ✅
+- `_otpAccessToken` ne figure dans aucun `debugPrint` ✅
+
+---
+
+### Résultat de la session
+
+**flutter analyze :**
+```
+4 issues (warning + 3 info) — tous préexistants, aucun dans les fichiers modifiés
+Nos fichiers : 0 erreur, 0 warning ✅
+```
+
+**APK release :**
+```
+flutter build apk --release → ✅ Succès
+APK : build/app/outputs/flutter-apk/app-release.apk (60.3 MB)
+Package : com.monmenumanager.manage
+Signing : release-key.jks (RSA 2048, alias: monmenu, validité 10 000 jours)
+```
+
+**Limitations corrigées (étaient dans la section ci-dessus) :**
+1. ~~Toggle actif codes promo~~ → **corrigé** (2.1)
+2. ~~Édition nom/WhatsApp livreur~~ → **corrigé** (2.2)
+3. ~~Réinitialisation mot de passe~~ → **corrigé** (3.2)
+4. Montant minimum commande (codes promo) — toujours en attente backend
