@@ -120,6 +120,10 @@ class AbonnementModel {
   /// Heures restantes avant expiration du délai.
   final int? heuresRestantesConfirmation;
 
+  /// Nom du plan depuis le champ plat 'plan_nom' (endpoint /historique)
+  /// ou depuis l'objet imbriqué plan.nom (autres endpoints si disponible).
+  final String? planNomPlat;
+
   const AbonnementModel({
     required this.id,
     required this.tenantId,
@@ -130,6 +134,7 @@ class AbonnementModel {
     this.finLe,
     this.autoRenouvellement = true,
     this.plan,
+    this.planNomPlat,
     this.montantPaye,
     this.devise,
     this.methodePaiement,
@@ -154,11 +159,14 @@ class AbonnementModel {
       debutLe: _parseDate(json['debut_le'] ?? json['date_debut']),
       finLe: _parseDate(json['fin_le'] ?? json['date_fin']),
       autoRenouvellement: json['auto_renouvellement'] as bool? ?? true,
+      // Objet imbriqué plan (si présent sur d'autres endpoints)
       plan: json['plans'] != null
           ? PlanModel.fromJson(json['plans'] as Map<String, dynamic>)
           : json['plan'] != null
               ? PlanModel.fromJson(json['plan'] as Map<String, dynamic>)
               : null,
+      // Champ plat 'plan_nom' retourné par /paiement/historique
+      planNomPlat: json['plan_nom'] as String?,
       montantPaye: _toDouble(json['montant_paye']),
       devise: json['devise'] as String?,
       methodePaiement: json['methode_paiement'] as String?,
@@ -190,6 +198,10 @@ class AbonnementModel {
   bool get isActif => statut == 'actif';
   bool get isEnAttente => statut == 'en_attente_confirmation';
   bool get isRejete => statut == 'rejete';
+
+  /// Nom du plan résolu : champ plat plan_nom (/historique) en priorité,
+  /// puis plan.nom (objet imbriqué si disponible sur d'autres endpoints).
+  String? get planNomEffectif => planNomPlat ?? plan?.nom;
 
   int? get joursRestants {
     if (finLe == null) return null;

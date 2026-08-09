@@ -184,7 +184,7 @@ class _AbonnementCard extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text(
-                abonnement.plan?.nom ?? 'Plan inconnu',
+                abonnement.planNomEffectif ?? 'Plan inconnu',
                 style: const TextStyle(
                   fontSize: 15,
                   fontWeight: FontWeight.w700,
