@@ -834,12 +834,19 @@ class _UploadProofSheetState extends State<_UploadProofSheet> {
   String? _error;
   String? _selectedImagePath;
   int? _imageSizeBytes;
+  final TextEditingController _numeroExpediteurCtrl = TextEditingController();
 
   static const _methods = [
     ('mobile_money', 'Mobile Money (Orange Money, Wave, MTN)'),
     ('virement', 'Virement bancaire'),
     ('carte', 'Carte bancaire Visa/Mastercard'),
   ];
+
+  @override
+  void dispose() {
+    _numeroExpediteurCtrl.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -973,6 +980,34 @@ class _UploadProofSheetState extends State<_UploadProofSheet> {
               onChanged: (v) => setState(() => _selectedMethod = v!),
               activeColor: AppColors.primary,
             ))),
+
+            const SizedBox(height: 12),
+
+            // Numéro utilisé pour le paiement
+            const Text(
+              'Numéro utilisé pour le paiement *',
+              style: TextStyle(
+                  fontWeight: FontWeight.w600,
+                  fontSize: 13,
+                  color: AppColors.gray700),
+            ),
+            const SizedBox(height: 4),
+            TextField(
+              controller: _numeroExpediteurCtrl,
+              keyboardType: TextInputType.phone,
+              decoration: InputDecoration(
+                hintText: 'Ex : +22612345678',
+                prefixIcon: const Icon(Icons.phone_rounded,
+                    size: 18, color: AppColors.gray400),
+                border:
+                    OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                contentPadding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                helperText:
+                    'Numéro Mobile Money / compte utilisé pour ce paiement (min 8 chiffres)',
+                helperMaxLines: 2,
+              ),
+            ),
 
             const SizedBox(height: 12),
 
@@ -1130,6 +1165,18 @@ class _UploadProofSheetState extends State<_UploadProofSheet> {
 
   Future<void> _submitProof() async {
     if (_selectedImagePath == null) return;
+
+    // Validation client du numéro expéditeur (cohérente avec backend : min 8 chiffres)
+    final numeroRaw = _numeroExpediteurCtrl.text.trim();
+    final numeroPropre = numeroRaw.replaceAll(RegExp(r'[^0-9]'), '');
+    if (numeroPropre.length < 8) {
+      setState(() {
+        _error =
+            'Le numéro utilisé pour le paiement est requis (8 chiffres minimum).';
+      });
+      return;
+    }
+
     setState(() {
       _isUploading = true;
       _error = null;
@@ -1144,6 +1191,7 @@ class _UploadProofSheetState extends State<_UploadProofSheet> {
         planId: widget.plan?.id ?? '',
         methodePaiement: _selectedMethod,
         periodicite: widget.periodicite ?? 'mensuel',
+        numeroExpediteur: numeroRaw,
       );
 
       if (!mounted) return;
@@ -1154,7 +1202,7 @@ class _UploadProofSheetState extends State<_UploadProofSheet> {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text(
-                '✅ Preuve envoyée ! Confirmation sous 38h.'),
+                '✅ Preuve envoyée ! Confirmation sous 48h.'),
             backgroundColor: AppColors.success,
             duration: Duration(seconds: 4),
           ),

@@ -249,9 +249,9 @@ class ApiService {
       get('/paiement/reference');
 
   /// POST /paiement/soumettre — multipart/form-data
-  /// Champs: preuve (File), plan_id, methode_paiement, periodicite
+  /// Champs: preuve (File), plan_id, methode_paiement, periodicite, numero_expediteur
   /// Retourne : {success, abonnement_id, reference, delai_confirmation,
-  ///             heures_delai: 72, message_38h, plan{nom, montant, devise}}
+  ///             heures_delai: 72, message, plan{nom, montant, devise}}
   ///
   /// SEC-02 : Le token n'est jamais loggé.
   /// SEC-07 : Idempotence — vérifier statut avant renvoi.
@@ -260,6 +260,7 @@ class ApiService {
     required String planId,
     required String methodePaiement,
     required String periodicite,
+    required String numeroExpediteur,
   }) async {
     try {
       final token = _authService.accessToken;
@@ -278,6 +279,8 @@ class ApiService {
       request.fields['plan_id'] = planId;
       request.fields['methode_paiement'] = methodePaiement;
       request.fields['periodicite'] = periodicite;
+      // Numéro utilisé pour le paiement — obligatoire côté backend (min 8 chiffres)
+      request.fields['numero_expediteur'] = numeroExpediteur;
 
       // Fichier preuve
       final file = File(filePath);
@@ -303,7 +306,8 @@ class ApiService {
       }
 
       return _parseResponse(response);
-    } on SocketException {
+    } on SocketException catch (e) {
+      debugPrint('[ApiService] soumettrePreuve SocketException: $e');
       return ApiResponse.failure(0, 'Pas de connexion internet.');
     } on TimeoutException {
       return ApiResponse.failure(0, 'Délai d\'upload dépassé. Réessayez.');

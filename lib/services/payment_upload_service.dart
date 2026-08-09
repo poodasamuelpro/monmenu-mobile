@@ -63,6 +63,7 @@ class PendingUpload {
   final String planId;
   final String methodePaiement;
   final String periodicite;
+  final String numeroExpediteur;
   final DateTime savedAt;
 
   const PendingUpload({
@@ -70,6 +71,7 @@ class PendingUpload {
     required this.planId,
     required this.methodePaiement,
     required this.periodicite,
+    required this.numeroExpediteur,
     required this.savedAt,
   });
 
@@ -78,6 +80,7 @@ class PendingUpload {
     'plan_id': planId,
     'methode_paiement': methodePaiement,
     'periodicite': periodicite,
+    'numero_expediteur': numeroExpediteur,
     'saved_at': savedAt.toIso8601String(),
   };
 
@@ -86,6 +89,7 @@ class PendingUpload {
     planId: json['plan_id'] as String,
     methodePaiement: json['methode_paiement'] as String,
     periodicite: json['periodicite'] as String,
+    numeroExpediteur: json['numero_expediteur'] as String? ?? '',
     savedAt: DateTime.tryParse(json['saved_at'] as String) ?? DateTime.now(),
   );
 }
@@ -179,6 +183,7 @@ class PaymentUploadService {
     required String planId,
     required String methodePaiement,
     required String periodicite,
+    required String numeroExpediteur,
   }) async {
     // Vérifier que le fichier existe
     if (!File(filePath).existsSync()) {
@@ -191,6 +196,7 @@ class PaymentUploadService {
       planId: planId,
       methodePaiement: methodePaiement,
       periodicite: periodicite,
+      numeroExpediteur: numeroExpediteur,
     );
 
     if (result.success) {
@@ -210,6 +216,7 @@ class PaymentUploadService {
         planId: planId,
         methodePaiement: methodePaiement,
         periodicite: periodicite,
+        numeroExpediteur: numeroExpediteur,
         savedAt: DateTime.now(),
       ));
       return UploadResult.err(
@@ -225,12 +232,14 @@ class PaymentUploadService {
     required String planId,
     required String methodePaiement,
     required String periodicite,
+    required String numeroExpediteur,
   }) async {
     final resp = await _api.soumettrePreuvePaiement(
       filePath: filePath,
       planId: planId,
       methodePaiement: methodePaiement,
       periodicite: periodicite,
+      numeroExpediteur: numeroExpediteur,
     );
 
     if (resp.success && resp.data != null) {
@@ -278,6 +287,7 @@ class PaymentUploadService {
       planId: pending.planId,
       methodePaiement: pending.methodePaiement,
       periodicite: pending.periodicite,
+      numeroExpediteur: pending.numeroExpediteur,
     );
   }
 
