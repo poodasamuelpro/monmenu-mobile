@@ -142,6 +142,10 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
 
   // ── Marquer une notification comme lue ────────────────────────────────────
   Future<void> _marquerLue(String id) async {
+    // Capturer le lien AVANT l'appel async (sécurité de synchronisation d'état)
+    final idx0 = _items.indexWhere((n) => n.id == id);
+    final lien = idx0 != -1 ? _items[idx0].lien : null;
+
     final api = context.read<ApiService>();
     final resp = await api.marquerNotificationLue(id, lue: true);
     if (!mounted) return;
@@ -154,6 +158,30 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
           if (_nbNonLues > 0) _nbNonLues--;
         }
       });
+
+      // Navigation sécurisée via whitelist de routes internes connues
+      if (lien != null && lien.isNotEmpty && mounted) {
+        const routesPermises = [
+          '/dashboard/commandes',
+          '/dashboard/home',
+          '/dashboard/menu',
+          '/dashboard/plans',
+          '/dashboard/restaurant',
+          '/dashboard/stats',
+          '/dashboard/settings',
+          '/dashboard/notifications',
+          '/dashboard/livreurs',
+          '/dashboard/qrcode',
+          '/dashboard/codes-promo',
+          '/dashboard/apparence',
+          '/dashboard/change-password',
+        ];
+        final estInterne = routesPermises.any((r) => lien.startsWith(r));
+        if (estInterne) {
+          context.go(lien);
+        }
+        // Si le lien n'est pas dans la whitelist : ignorer silencieusement (pas de crash)
+      }
     }
   }
 
@@ -287,15 +315,35 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
           Padding(
             padding: const EdgeInsets.only(right: 4),
             child: FilterChip(
-              label: const Text('Non lues', style: TextStyle(fontSize: 12)),
+              label: Text(
+                'Non lues',
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  // Couleur explicite pour garantir le contraste WCAG
+                  // Sélectionné : rouge primary sur fond primaryLight (red-100)
+                  // Non sélectionné : gray700 (#374151) sur fond gray100 (#F3F4F6)
+                  color: _nonLuesSeulement
+                      ? AppColors.primary
+                      : AppColors.gray700,
+                ),
+              ),
               selected: _nonLuesSeulement,
               onSelected: (v) {
                 setState(() => _nonLuesSeulement = v);
                 _loadPage(reset: true);
               },
               selectedColor: AppColors.primaryLight,
+              backgroundColor: AppColors.gray100,
               checkmarkColor: AppColors.primary,
-              padding: const EdgeInsets.symmetric(horizontal: 4),
+              showCheckmark: false,
+              side: BorderSide(
+                color: _nonLuesSeulement
+                    ? AppColors.primaryBorder
+                    : AppColors.gray300,
+                width: 1,
+              ),
+              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 0),
             ),
           ),
           // Tout marquer comme lus
