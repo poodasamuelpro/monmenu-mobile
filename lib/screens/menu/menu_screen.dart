@@ -12,6 +12,7 @@ import 'package:provider/provider.dart';
 import '../../models/produit_model.dart';
 import '../../services/api_service.dart';
 import '../../theme/app_theme.dart';
+import '../../widgets/app_drawer.dart';
 import '../../widgets/loading_widget.dart';
 
 class MenuScreen extends StatefulWidget {
