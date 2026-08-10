@@ -63,6 +63,35 @@
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />
+
+        <!-- ═══════════════════════════════════════════════════════════════ -->
+        <!-- FCM — Firebase Cloud Messaging (notifications push app fermée) -->
+        <!-- ═══════════════════════════════════════════════════════════════ -->
+
+        <!-- Service FCM : reçoit les messages background/terminated -->
+        <service
+            android:name="com.google.firebase.messaging.FirebaseMessagingService"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.google.firebase.MESSAGING_EVENT" />
+            </intent-filter>
+        </service>
+
+        <!-- Icône par défaut des notifications FCM -->
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_icon"
+            android:resource="@mipmap/ic_launcher" />
+
+        <!-- Couleur par défaut des notifications FCM (#DC2626 = rouge MonMenu) -->
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_color"
+            android:resource="@color/notification_color" />
+
+        <!-- Canal par défaut (Android 8+) : commandes haute priorité -->
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_channel_id"
+            android:value="commandes_channel" />
+
     </application>
 
     <queries>

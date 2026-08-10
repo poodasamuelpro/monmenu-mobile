@@ -1,5 +1,7 @@
 // lib/main.dart — MonMenu Manager
-// Supabase init + go_router + providers + auth guard + notifications
+// Supabase init + go_router + providers + auth guard + notifications + FCM
+import 'package:firebase_core/firebase_core.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
@@ -12,6 +14,7 @@ import 'services/auth_service.dart';
 import 'services/api_service.dart';
 import 'services/realtime_service.dart';
 import 'services/notification_service.dart';
+import 'services/fcm_service.dart';
 import 'providers/commandes_provider.dart';
 import 'providers/dashboard_provider.dart';
 import 'theme/app_theme.dart';
@@ -43,6 +46,13 @@ void main() async {
     DeviceOrientation.portraitUp,
     DeviceOrientation.portraitDown,
   ]);
+
+  // ── Firebase Init — DOIT être avant Supabase ───────────────────────────────
+  // Requis pour FCM (Firebase Cloud Messaging).
+  // Le handler background firebaseMessagingBackgroundHandler (fcm_service.dart)
+  // appellera aussi Firebase.initializeApp() dans son isolate séparé.
+  await Firebase.initializeApp();
+  if (kDebugMode) debugPrint('[Main] Firebase initialisé ✅');
 
   // ── Supabase Init ──────────────────────────────────────────────────────────
   await Supabase.initialize(
@@ -76,6 +86,7 @@ class _MonMenuAppState extends State<MonMenuApp> {
   late final ApiService _apiService;
   late final RealtimeService _realtimeService;
   late final NotificationService _notificationService;
+  late final FCMService _fcmService;
   late final CommandesProvider _commandesProvider;
   late final DashboardProvider _dashboardProvider;
   late final GoRouter _router;
@@ -87,10 +98,11 @@ class _MonMenuAppState extends State<MonMenuApp> {
     _apiService = ApiService(_authService);
     _realtimeService = RealtimeService();
     _notificationService = NotificationService();
+    _fcmService = FCMService();
     _commandesProvider = CommandesProvider(_apiService, _realtimeService);
     _dashboardProvider = DashboardProvider(_apiService);
 
-    // ── Initialiser les notifications au démarrage ─────────────────────────
+    // ── Initialiser les notifications locales au démarrage ─────────────────
     _notificationService.init();
 
     // ── go_router ─────────────────────────────────────────────────────────────
@@ -216,18 +228,96 @@ class _MonMenuAppState extends State<MonMenuApp> {
       if (restored) {
         final tenant = _authService.tenant;
         if (tenant != null) {
-          // Démarrer Realtime + notifications après restauration
+          // Démarrer Realtime + notifications locales après restauration
           _realtimeService.subscribe(tenant.id);
           _notificationService.subscribe(tenant.id);
 
-          // Connecter callback commandes → provider
+          // Connecter callback commandes → provider (rechargement liste)
           _notificationService.onNouvelleCommande =
               (id, nomClient, montant) {
             _commandesProvider.loadCommandes();
           };
+
+          // ── Initialiser FCM après session restaurée ──────────────────────
+          // FCM nécessite une session active pour envoyer le token au backend
+          _initFCM();
         }
       }
     });
+  }
+
+  // ── Initialisation FCM ────────────────────────────────────────────────────
+
+  void _initFCM() {
+    _fcmService.init(
+      // Callback 1 : Token obtenu/rafraîchi → l'envoyer au backend
+      onTokenReceived: (token) async {
+        final resp = await _apiService.saveFcmToken(token);
+        if (kDebugMode) {
+          if (resp.success) {
+            debugPrint('[FCM] Token enregistré en backend ✅');
+          } else {
+            debugPrint('[FCM] Erreur enregistrement token: ${resp.error}');
+          }
+        }
+      },
+
+      // Callback 2 : Message FCM reçu FOREGROUND (app ouverte)
+      // DÉDOUBLONNAGE : Supabase Realtime gère déjà la bannière in-app.
+      // On n'affiche PAS une deuxième notification locale.
+      // On se contente de recharger les commandes si nécessaire.
+      onForegroundMessage: (message) {
+        final type = message.data['type'] as String? ?? '';
+        if (kDebugMode) {
+          debugPrint(
+              '[FCM Foreground] Message ignoré (Realtime actif) — type: $type');
+        }
+        // Si la commande est arrivée via FCM et pas encore via Realtime,
+        // recharger pour garantir la cohérence
+        if (type == 'commande') {
+          _commandesProvider.loadCommandes();
+        }
+      },
+
+      // Callback 3 : App ouverte depuis une notification (arrière-plan ou fermée)
+      onAppOpenedFromNotif: (message) {
+        if (message == null) return;
+        final type = message.data['type'] as String? ?? '';
+        final commandeId = message.data['commandeId'] as String?;
+
+        if (kDebugMode) {
+          debugPrint(
+              '[FCM] Ouverture depuis notif — type: $type, commandeId: $commandeId');
+        }
+
+        // Navigation selon le type de notification
+        if (type == 'commande' && commandeId != null && commandeId.isNotEmpty) {
+          // Naviguer vers le détail de la commande
+          _router.push('/dashboard/commandes/$commandeId');
+        } else if (type.startsWith('paiement') || type == 'paiement_confirme' ||
+            type == 'paiement_rejete' || type == 'paiement_recu') {
+          // Naviguer vers la page plans/abonnement
+          _router.push('/dashboard/plans');
+        } else {
+          // Fallback : commandes en cours
+          _router.push('/dashboard/commandes');
+        }
+      },
+    );
+  }
+
+  // ── Logout avec suppression token FCM ────────────────────────────────────
+  // À appeler depuis les écrans qui déclenchent le logout.
+  // Exposé via Provider pour que les écrans y accèdent.
+  Future<void> logoutWithFCMCleanup() async {
+    // 1. Supprimer le token FCM du backend avant déconnexion
+    final currentToken = _fcmService.fcmToken;
+    if (currentToken != null) {
+      await _apiService.deleteFcmToken(currentToken);
+      await _fcmService.deleteToken();
+    }
+    // 2. Déconnecter de Supabase
+    await _authService.logout();
   }
 
   @override
@@ -238,6 +328,7 @@ class _MonMenuAppState extends State<MonMenuApp> {
         Provider.value(value: _apiService),
         ChangeNotifierProvider.value(value: _realtimeService),
         ChangeNotifierProvider.value(value: _notificationService),
+        Provider.value(value: _fcmService),
         ChangeNotifierProvider.value(value: _commandesProvider),
         ChangeNotifierProvider.value(value: _dashboardProvider),
       ],

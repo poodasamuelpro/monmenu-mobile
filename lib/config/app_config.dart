@@ -50,4 +50,16 @@ class AppConfig {
   static const String hiveBoxCommandes = 'commandes_cache';
   static const String hiveBoxMenu = 'menu_cache';
   static const String hiveBoxStats = 'stats_cache';
+
+  // ── FCM — Firebase Cloud Messaging ────────────────────────────────────────
+  // Endpoint pour enregistrer/supprimer le token FCM du device
+  static const String fcmTokenEndpoint = '/dashboard/fcm-token';
+
+  // IDs des canaux Android (doivent correspondre aux canaux créés dans NotificationService)
+  static const String fcmChannelCommandes = 'commandes_channel';
+  static const String fcmChannelPaiement = 'payment_channel';
+
+  // Firebase Project ID (source: google-services.json → project_info.project_id)
+  // Utilisé dans les logs uniquement — les secrets FCM backend sont dans Cloudflare env vars
+  static const String firebaseProjectId = 'monmenumanager';
 }

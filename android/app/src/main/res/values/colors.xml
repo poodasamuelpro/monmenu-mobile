@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  colors.xml — Ressources couleurs Android pour MonMenu Manager
+  notification_color : utilisé par FCM comme couleur d'accent de la notification
+  Valeur : #DC2626 = rouge primaire MonMenu (AppConfig.primaryColorHex)
+-->
+<resources>
+    <color name="notification_color">#DC2626</color>
+</resources>

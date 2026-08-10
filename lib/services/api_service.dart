@@ -451,6 +451,25 @@ class ApiService {
   /// Retourne : {notifications[], count, non_lues}
   Future<ApiResponse> getPaiementNotifications() async =>
       get('/paiement/notifications');
+
+  // ── FCM — Firebase Cloud Messaging ────────────────────────────────────────
+
+  /// POST /dashboard/fcm-token — Enregistrer ou mettre à jour le token FCM du device
+  /// Body : { token: String, platform: 'android' }
+  /// Retourne : { success: true }
+  /// Appelé par FCMService après obtention du token ET à chaque rafraîchissement.
+  /// SEC : le token n'est jamais loggé.
+  Future<ApiResponse> saveFcmToken(String token) async =>
+      post('/dashboard/fcm-token', {
+        'token': token,
+        'platform': 'android',
+      });
+
+  /// DELETE /dashboard/fcm-token?token=xxx — Supprimer le token à la déconnexion
+  /// Évite que le backend envoie des push à un device déconnecté.
+  /// Appelé depuis main.dart lors du logout, AVANT auth_service.logout().
+  Future<ApiResponse> deleteFcmToken(String token) async =>
+      delete('/dashboard/fcm-token?token=${Uri.encodeComponent(token)}');
 }
 
 class ApiResponse {

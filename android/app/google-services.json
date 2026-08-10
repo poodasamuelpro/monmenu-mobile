@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "99928689705",
+    "project_id": "monmenumanager",
+    "storage_bucket": "monmenumanager.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:99928689705:android:e71f1b8a3d18848855a038",
+        "android_client_info": {
+          "package_name": "com.monmenumanager.manage"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAVjoiSyP69hYtYfl_ghDDfJkrYjG9_XZg"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
