@@ -25,7 +25,6 @@ class PlansScreen extends StatefulWidget {
 }
 
 class _PlansScreenState extends State<PlansScreen> {
-  bool _annuel = false;
   Timer? _countdownTimer;
   late PaymentUploadService _uploadService;
 
@@ -113,28 +112,6 @@ class _PlansScreenState extends State<PlansScreen> {
                 const SizedBox(height: 16),
               ],
 
-              // ── Toggle mensuel/annuel ──────────────────────────────────
-              Container(
-                padding: const EdgeInsets.all(4),
-                decoration: BoxDecoration(
-                  color: AppColors.gray100,
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Row(
-                  children: [
-                    Expanded(child: _PeriodTab(
-                      label: 'Mensuel',
-                      isActive: !_annuel,
-                      onTap: () => setState(() => _annuel = false),
-                    )),
-                    Expanded(child: _PeriodTab(
-                      label: 'Annuel (-15%)',
-                      isActive: _annuel,
-                      onTap: () => setState(() => _annuel = true),
-                    )),
-                  ],
-                ),
-              ),
               const SizedBox(height: 20),
 
               // ── Plans ──────────────────────────────────────────────────
@@ -143,12 +120,11 @@ class _PlansScreenState extends State<PlansScreen> {
               else ...[
                 ...dashboard.plans.map((plan) => _PlanCard(
                   plan: plan,
-                  annuel: _annuel,
                   isCurrent: false, // plan.id non disponible dans ProfilModel plat (profil retourne plan_nom seulement)
                   onSelect: () => _showUploadSheet(
                     context,
                     plan,
-                    _annuel ? 'annuel' : 'mensuel',
+                    'mensuel',
                   ),
                 )),
               ],
@@ -539,13 +515,11 @@ class _PaymentInfoCard extends StatelessWidget {
 // ── Plan Card ─────────────────────────────────────────────────────────────────
 class _PlanCard extends StatelessWidget {
   final PlanModel plan;
-  final bool annuel;
   final bool isCurrent;
   final VoidCallback onSelect;
 
   const _PlanCard({
     required this.plan,
-    required this.annuel,
     required this.isCurrent,
     required this.onSelect,
   });
@@ -553,7 +527,7 @@ class _PlanCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isPro = plan.nom == 'Pro';
-    final prix = annuel ? plan.prixAnnuel : plan.prixMensuel;
+    final prix = plan.prixMensuel;
     final isGratuit = plan.isGratuit;
 
     return Container(
@@ -662,9 +636,9 @@ class _PlanCard extends StatelessWidget {
                       ),
                     ),
                     if (!isGratuit)
-                      Text(
-                        annuel ? '/an' : '/mois',
-                        style: const TextStyle(
+                      const Text(
+                        '/mois',
+                        style: TextStyle(
                             fontSize: 12, color: AppColors.gray400),
                       ),
                   ],
@@ -766,48 +740,6 @@ class _Feature extends StatelessWidget {
   }
 }
 
-class _PeriodTab extends StatelessWidget {
-  final String label;
-  final bool isActive;
-  final VoidCallback onTap;
-  const _PeriodTab(
-      {required this.label, required this.isActive, required this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        padding: const EdgeInsets.symmetric(vertical: 10),
-        decoration: BoxDecoration(
-          color: isActive ? AppColors.surface : Colors.transparent,
-          borderRadius: BorderRadius.circular(10),
-          boxShadow: isActive
-              ? [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.05),
-                    blurRadius: 4,
-                    offset: const Offset(0, 2),
-                  )
-                ]
-              : null,
-        ),
-        child: Center(
-          child: Text(
-            label,
-            style: TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.w600,
-              color: isActive ? AppColors.gray900 : AppColors.gray500,
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
 // ── Sheet upload preuve ───────────────────────────────────────────────────────
 class _UploadProofSheet extends StatefulWidget {
   final PlanModel? plan;
@@ -829,18 +761,51 @@ class _UploadProofSheet extends StatefulWidget {
 }
 
 class _UploadProofSheetState extends State<_UploadProofSheet> {
-  String _selectedMethod = 'mobile_money';
+  String? _selectedMethod;
   bool _isUploading = false;
   String? _error;
   String? _selectedImagePath;
   int? _imageSizeBytes;
   final TextEditingController _numeroExpediteurCtrl = TextEditingController();
 
-  static const _methods = [
-    ('mobile_money', 'Mobile Money (Orange Money, Wave, MTN)'),
-    ('virement', 'Virement bancaire'),
-    ('carte', 'Carte bancaire Visa/Mastercard'),
-  ];
+  // Moyens de paiement chargés dynamiquement depuis l'API
+  List<Map<String, dynamic>> _moyensPaiement = [];
+  bool _loadingMoyens = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadMoyensPaiement();
+  }
+
+  Future<void> _loadMoyensPaiement() async {
+    setState(() => _loadingMoyens = true);
+    try {
+      final api = context.read<ApiService>();
+      final resp = await api.getMoyensPaiement();
+      if (!mounted) return;
+      if (resp.success && resp.data != null) {
+        final raw = resp.data!['moyens'];
+        if (raw is List) {
+          final liste = raw
+              .whereType<Map<String, dynamic>>()
+              .where((m) => m['actif'] == true)
+              .toList();
+          setState(() {
+            _moyensPaiement = liste;
+            // Sélectionner le premier moyen par défaut
+            if (liste.isNotEmpty && _selectedMethod == null) {
+              _selectedMethod = liste.first['code'] as String?;
+            }
+          });
+        }
+      }
+    } catch (_) {
+      // En cas d'échec réseau, continuer sans crash
+    } finally {
+      if (mounted) setState(() => _loadingMoyens = false);
+    }
+  }
 
   @override
   void dispose() {
@@ -850,11 +815,8 @@ class _UploadProofSheetState extends State<_UploadProofSheet> {
 
   @override
   Widget build(BuildContext context) {
-    final prix = widget.plan != null
-        ? (widget.periodicite == 'annuel'
-            ? widget.plan!.prixAnnuel
-            : widget.plan!.prixMensuel)
-        : null;
+    // periodicite est toujours 'mensuel' — prixAnnuel supprimé du flow
+    final prix = widget.plan?.prixMensuel;
 
     return Padding(
       padding: EdgeInsets.only(
@@ -892,8 +854,7 @@ class _UploadProofSheetState extends State<_UploadProofSheet> {
               ),
               if (prix != null)
                 Text(
-                  '${prix.toStringAsFixed(0)} ${widget.plan!.devise} '
-                  '/ ${widget.periodicite == 'annuel' ? 'an' : 'mois'}',
+                  '${prix.toStringAsFixed(0)} ${widget.plan!.devise} / mois',
                   style: const TextStyle(
                     fontSize: 18,
                     fontWeight: FontWeight.w800,
@@ -967,19 +928,103 @@ class _UploadProofSheetState extends State<_UploadProofSheet> {
                   color: AppColors.gray700),
             ),
             const SizedBox(height: 8),
-            ...(_methods.map((m) => RadioListTile<String>(
-              contentPadding: EdgeInsets.zero,
-              dense: true,
-              value: m.$1,
-              // ignore: deprecated_member_use
-              groupValue: _selectedMethod,
-              title: Text(m.$2,
-                  style: const TextStyle(
-                      fontSize: 13, color: AppColors.gray700)),
-              // ignore: deprecated_member_use
-              onChanged: (v) => setState(() => _selectedMethod = v!),
-              activeColor: AppColors.primary,
-            ))),
+            if (_loadingMoyens)
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 12),
+                child: Center(
+                  child: SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: AppColors.primary,
+                    ),
+                  ),
+                ),
+              )
+            else if (_moyensPaiement.isEmpty)
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 8),
+                child: Text(
+                  'Aucun moyen de paiement disponible. Contactez le support.',
+                  style: TextStyle(fontSize: 13, color: AppColors.gray400),
+                ),
+              )
+            else
+              ...(_moyensPaiement.map((m) {
+                final code = m['code'] as String? ?? '';
+                final nom = m['nom'] as String? ?? code;
+                final numero = m['numero'] as String?;
+                final instructions = m['instructions'] as String?;
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    RadioListTile<String>(
+                      contentPadding: EdgeInsets.zero,
+                      dense: true,
+                      value: code,
+                      groupValue: _selectedMethod,
+                      title: Text(
+                        nom,
+                        style: const TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                            color: AppColors.gray700),
+                      ),
+                      onChanged: (v) => setState(() => _selectedMethod = v),
+                      activeColor: AppColors.primary,
+                    ),
+                    if (_selectedMethod == code) ...[
+                      if (numero != null && numero.isNotEmpty)
+                        Padding(
+                          padding: const EdgeInsets.only(
+                              left: 16, right: 16, bottom: 4),
+                          child: Row(
+                            children: [
+                              const Icon(Icons.phone_rounded,
+                                  size: 14, color: AppColors.secondary),
+                              const SizedBox(width: 6),
+                              Expanded(
+                                child: Text(
+                                  'N° : $numero',
+                                  style: const TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w700,
+                                      color: AppColors.secondary),
+                                ),
+                              ),
+                              GestureDetector(
+                                onTap: () {
+                                  Clipboard.setData(
+                                      ClipboardData(text: numero));
+                                  ScaffoldMessenger.of(context)
+                                      .showSnackBar(const SnackBar(
+                                    content: Text('Numéro copié !'),
+                                    duration: Duration(seconds: 2),
+                                  ));
+                                },
+                                child: const Icon(Icons.copy_rounded,
+                                    size: 14, color: AppColors.secondary),
+                              ),
+                            ],
+                          ),
+                        ),
+                      if (instructions != null && instructions.isNotEmpty)
+                        Padding(
+                          padding: const EdgeInsets.only(
+                              left: 16, right: 16, bottom: 8),
+                          child: Text(
+                            instructions,
+                            style: const TextStyle(
+                                fontSize: 11,
+                                color: AppColors.gray500,
+                                fontStyle: FontStyle.italic),
+                          ),
+                        ),
+                    ],
+                  ],
+                );
+              })),
 
             const SizedBox(height: 12),
 
@@ -1119,7 +1164,7 @@ class _UploadProofSheetState extends State<_UploadProofSheet> {
                 label: Text(_isUploading
                     ? 'Envoi en cours…'
                     : 'J\'ai effectué le paiement'),
-                onPressed: _isUploading || _selectedImagePath == null
+                onPressed: _isUploading || _selectedImagePath == null || _selectedMethod == null || _loadingMoyens
                     ? null
                     : _submitProof,
               ),
@@ -1189,7 +1234,7 @@ class _UploadProofSheetState extends State<_UploadProofSheet> {
       final result = await widget.uploadService.uploadPreuve(
         filePath: _selectedImagePath!,
         planId: widget.plan?.id ?? '',
-        methodePaiement: _selectedMethod,
+        methodePaiement: _selectedMethod ?? 'mobile_money',
         periodicite: widget.periodicite ?? 'mensuel',
         numeroExpediteur: numeroRaw,
       );

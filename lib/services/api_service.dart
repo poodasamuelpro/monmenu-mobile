@@ -277,6 +277,12 @@ class ApiService {
   /// GET /plans
   Future<ApiResponse> getPlans() async => get('/plans');
 
+  /// GET /api/v1/moyens-paiement — endpoint PUBLIC (pas d'auth requise)
+  /// Référence web: monmenu/src/index.tsx lignes 155-169
+  /// Retourne: {moyens: [{id, code, nom, description, instructions, numero, logo_url, actif}]}
+  /// Trié par ordre_affichage ASC, filtre actif=true côté serveur.
+  Future<ApiResponse> getMoyensPaiement() async => get('/moyens-paiement');
+
   // ── Paiement endpoints ─────────────────────────────────────────────────────
 
   /// GET /paiement/statut
