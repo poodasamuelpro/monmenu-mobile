@@ -7,6 +7,7 @@ import '../../models/livreur_model.dart';
 import '../../services/api_service.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/loading_widget.dart';
+import '../../widgets/app_drawer.dart';
 
 class CodesPromoScreen extends StatefulWidget {
   const CodesPromoScreen({super.key});
@@ -161,6 +162,7 @@ class _CodesPromoScreenState extends State<CodesPromoScreen> {
         icon: const Icon(Icons.add_rounded, color: Colors.white),
         label: const Text('Nouveau code', style: TextStyle(color: Colors.white)),
       ),
+      drawer: const AppDrawer(),
       body: _buildBody(),
     );
   }

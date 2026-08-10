@@ -9,6 +9,7 @@ import '../../models/livreur_model.dart';
 import '../../services/api_service.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/loading_widget.dart';
+import '../../widgets/app_drawer.dart';
 
 class LivreursScreen extends StatefulWidget {
   const LivreursScreen({super.key});
@@ -143,6 +144,7 @@ class _LivreursScreenState extends State<LivreursScreen> {
         icon: const Icon(Icons.add_rounded, color: Colors.white),
         label: const Text('Ajouter', style: TextStyle(color: Colors.white)),
       ),
+      drawer: const AppDrawer(),
       body: _buildBody(),
     );
   }

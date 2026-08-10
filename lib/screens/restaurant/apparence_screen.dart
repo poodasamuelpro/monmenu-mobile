@@ -8,6 +8,7 @@ import '../../services/api_service.dart';
 import '../../services/auth_service.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/loading_widget.dart';
+import '../../widgets/app_drawer.dart';
 
 class ApparenceScreen extends StatefulWidget {
   const ApparenceScreen({super.key});
@@ -236,6 +237,7 @@ class _ApparenceScreenState extends State<ApparenceScreen> {
           child: Divider(height: 1, color: AppColors.gray200),
         ),
       ),
+      drawer: const AppDrawer(),
       body: _buildBody(),
     );
   }

@@ -15,6 +15,7 @@ import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import '../../services/api_service.dart';
 import '../../theme/app_theme.dart';
+import '../../widgets/app_drawer.dart';
 
 /// Modèle local pour une notification restaurant
 class _NotifItem {
@@ -368,6 +369,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
           const SizedBox(width: 4),
         ],
       ),
+      drawer: const AppDrawer(),
       body: _buildBody(),
     );
   }

@@ -220,6 +220,7 @@ class _MenuScreenState extends State<MenuScreen> with SingleTickerProviderStateM
               label: const Text('Produit', style: TextStyle(color: Colors.white)),
             )
           : null,
+      drawer: const AppDrawer(),
       body: _buildBody(),
     );
   }

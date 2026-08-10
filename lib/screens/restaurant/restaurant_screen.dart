@@ -7,6 +7,7 @@ import '../../models/livreur_model.dart';
 import '../../services/api_service.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/loading_widget.dart';
+import '../../widgets/app_drawer.dart';
 
 class RestaurantScreen extends StatefulWidget {
   const RestaurantScreen({super.key});
@@ -191,6 +192,7 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
             ),
         ],
       ),
+      drawer: const AppDrawer(),
       body: _buildBody(),
     );
   }

@@ -10,6 +10,7 @@ import '../../services/api_service.dart';
 import '../../services/auth_service.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/loading_widget.dart';
+import '../../widgets/app_drawer.dart';
 
 class QrCodeScreen extends StatefulWidget {
   const QrCodeScreen({super.key});
@@ -149,6 +150,7 @@ class _QrCodeScreenState extends State<QrCodeScreen> {
           ),
         ],
       ),
+      drawer: const AppDrawer(),
       body: _buildBody(),
     );
   }
