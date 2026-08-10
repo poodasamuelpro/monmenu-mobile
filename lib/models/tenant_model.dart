@@ -181,10 +181,11 @@ class TenantModel {
     return diff < 0 ? 0 : diff;
   }
 
-  /// Vrai si l'essai expire dans moins de 3 jours.
+  /// Vrai si l'essai expire dans 5 jours ou moins.
+  /// Aligné sur le seuil web : api-paiement.ts ligne 650 — `if (joursRestants <= 5)`
   bool get essaiExpireBientot {
     final jours = joursEssaiRestants;
-    return isEssai && jours != null && jours <= 3;
+    return isEssai && jours != null && jours <= 5;
   }
 
   String get boutiqueUrl => 'https://monmenu.app/$slug';

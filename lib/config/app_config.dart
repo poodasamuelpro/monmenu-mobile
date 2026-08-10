@@ -38,7 +38,7 @@ class AppConfig {
   // ── App info ──────────────────────────────────────────────────────────────
   static const String appName = 'MonMenu';
   static const String appVersion = '1.0.0';
-  static const String supportEmail = 'support@monmenu.app';
+  static const String supportEmail = 'contact.monmenu@gmail.com';
 
   // ── Stockage sécurisé — clés ──────────────────────────────────────────────
   static const String keyAccessToken = 'mm_access_token';

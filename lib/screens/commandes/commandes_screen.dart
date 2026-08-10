@@ -11,6 +11,7 @@ import '../../theme/app_theme.dart';
 import '../../widgets/app_drawer.dart';
 import '../../widgets/commande_card.dart';
 import '../../widgets/loading_widget.dart' as lw;
+import '../../widgets/payment_alert_banner.dart';
 
 class CommandesScreen extends StatefulWidget {
   const CommandesScreen({super.key});
@@ -111,6 +112,12 @@ class _CommandesScreenState extends State<CommandesScreen> {
       body: Column(
         children: [
           // ── Filtres statuts ──────────────────────────────────────────────
+          // ── Bandeau alerte paiement ──────────────────────────────────────────
+          const Padding(
+            padding: EdgeInsets.fromLTRB(16, 12, 16, 0),
+            child: PaymentAlertBanner(),
+          ),
+
           _StatutFilter(
             current: provider.statutFilter,
             onChanged: (s) => provider.setFilter(s),

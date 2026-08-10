@@ -7,6 +7,7 @@ import '../../models/plan_model.dart';
 import '../../providers/dashboard_provider.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/app_drawer.dart';
+import '../../widgets/payment_alert_banner.dart';
 import '../../widgets/loading_widget.dart' as lw;
 
 class StatsScreen extends StatefulWidget {
@@ -50,6 +51,10 @@ class _StatsScreenState extends State<StatsScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              // ── Bandeau alerte paiement ────────────────────────────────────
+              const PaymentAlertBanner(),
+              const SizedBox(height: 4),
+
               if (dashboard.isLoadingStats)
                 const lw.ShimmerList(count: 3)
               else if (stats == null)
