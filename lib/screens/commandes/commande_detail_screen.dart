@@ -593,8 +593,7 @@ class _InfoRow extends StatelessWidget {
 class _TotalRow extends StatelessWidget {
   final String label;
   final String value;
-  final bool isDiscount;
-  const _TotalRow({required this.label, required this.value, this.isDiscount = false});
+  const _TotalRow({required this.label, required this.value});
 
   @override
   Widget build(BuildContext context) {
@@ -604,9 +603,9 @@ class _TotalRow extends StatelessWidget {
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           Text(label, style: const TextStyle(fontSize: 13, color: AppColors.gray500)),
-          Text(value, style: TextStyle(
+          Text(value, style: const TextStyle(
             fontSize: 13,
-            color: isDiscount ? AppColors.success : AppColors.gray600,
+            color: AppColors.gray600,
             fontWeight: FontWeight.w500,
           )),
         ],

@@ -102,9 +102,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
       body: RefreshIndicator(
         color: AppColors.primary,
         onRefresh: () async {
-          await context.read<DashboardProvider>().loadAll();
-          await context.read<DashboardProvider>().loadAbonnement();
-          await context.read<CommandesProvider>().loadCommandes();
+          final dashboard = context.read<DashboardProvider>();
+          final commandes = context.read<CommandesProvider>();
+          await dashboard.loadAll();
+          await dashboard.loadAbonnement();
+          await commandes.loadCommandes();
         },
         child: SingleChildScrollView(
           physics: const AlwaysScrollableScrollPhysics(),

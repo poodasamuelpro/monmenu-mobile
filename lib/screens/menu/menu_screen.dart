@@ -659,6 +659,9 @@ class _ProduitDialogState extends State<_ProduitDialog> {
     try {
       setState(() => _isUploadingImage = true);
 
+      // Capturer le provider avant tout await (évite use_build_context_synchronously)
+      final api = context.read<ApiService>();
+
       // Dossier temp
       final tempDir = await getTemporaryDirectory();
       final compressedPath = '${tempDir.path}/produit_${DateTime.now().millisecondsSinceEpoch}.jpg';
@@ -676,7 +679,6 @@ class _ProduitDialogState extends State<_ProduitDialog> {
       final filePath = result?.path ?? imageFile.path;
 
       // Upload via API
-      final api = context.read<ApiService>();
       final resp = await api.uploadImage(filePath);
 
       if (!mounted) return null;

@@ -959,20 +959,55 @@ class _UploadProofSheetState extends State<_UploadProofSheet> {
                 return Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    RadioListTile<String>(
-                      contentPadding: EdgeInsets.zero,
-                      dense: true,
-                      value: code,
-                      groupValue: _selectedMethod,
-                      title: Text(
-                        nom,
-                        style: const TextStyle(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w600,
-                            color: AppColors.gray700),
+                    InkWell(
+                      onTap: () => setState(() => _selectedMethod = code),
+                      borderRadius: BorderRadius.circular(8),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                            vertical: 8, horizontal: 4),
+                        child: Row(
+                          children: [
+                            // Indicateur radio custom — sans Radio déprécié
+                            Container(
+                              width: 20,
+                              height: 20,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                border: Border.all(
+                                  color: _selectedMethod == code
+                                      ? AppColors.primary
+                                      : AppColors.gray300,
+                                  width: 2,
+                                ),
+                              ),
+                              child: _selectedMethod == code
+                                  ? Center(
+                                      child: Container(
+                                        width: 10,
+                                        height: 10,
+                                        decoration: const BoxDecoration(
+                                          shape: BoxShape.circle,
+                                          color: AppColors.primary,
+                                        ),
+                                      ),
+                                    )
+                                  : null,
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Text(
+                                nom,
+                                style: TextStyle(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w600,
+                                    color: _selectedMethod == code
+                                        ? AppColors.primary
+                                        : AppColors.gray700),
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
-                      onChanged: (v) => setState(() => _selectedMethod = v),
-                      activeColor: AppColors.primary,
                     ),
                     if (_selectedMethod == code) ...[
                       if (numero != null && numero.isNotEmpty)
