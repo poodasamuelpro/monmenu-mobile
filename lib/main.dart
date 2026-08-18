@@ -31,6 +31,7 @@ import 'screens/menu/menu_screen.dart';
 import 'screens/supplements/supplements_screen.dart';
 import 'screens/stats/stats_screen.dart';
 import 'screens/settings/settings_screen.dart';
+import 'screens/settings/compte_screen.dart';
 import 'screens/plans/plans_screen.dart';
 import 'screens/plans/abonnement_historique_screen.dart';
 import 'screens/restaurant/livreurs_screen.dart';
@@ -222,6 +223,13 @@ class _MonMenuAppState extends State<MonMenuApp> {
         GoRoute(
           path: '/dashboard/settings',
           builder: (_, __) => const SettingsScreen(),
+          routes: [
+            // P3 — suppression de compte (parité web)
+            GoRoute(
+              path: 'compte',
+              builder: (_, __) => const CompteScreen(),
+            ),
+          ],
         ),
         GoRoute(
           path: '/dashboard/change-password',

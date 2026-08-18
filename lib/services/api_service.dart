@@ -534,6 +534,22 @@ class ApiService {
   Future<ApiResponse> getPaiementNotifications() async =>
       get('/paiement/notifications');
 
+  // ── Suppression de compte (parité web api-dashboard.ts l.2547-2790) ───────
+
+  /// POST /dashboard/compte/demander-suppression
+  /// Retourne : { success, message, suppression_prevue_le }
+  /// 429 si plus de 3 demandes en 24h (rate-limit backend).
+  /// La confirmation finale passe par un lien envoyé PAR EMAIL
+  /// (GET /compte/confirmer-suppression?token= — hors application mobile).
+  Future<ApiResponse> demanderSuppressionCompte() async =>
+      post('/dashboard/compte/demander-suppression', {});
+
+  /// POST /dashboard/compte/annuler-suppression
+  /// Retourne : { success, message }
+  /// 422 « Aucune demande de suppression en cours. » si aucune demande active.
+  Future<ApiResponse> annulerSuppressionCompte() async =>
+      post('/dashboard/compte/annuler-suppression', {});
+
   // ── FCM — Firebase Cloud Messaging ────────────────────────────────────────
 
   /// POST /dashboard/fcm-token — Enregistrer ou mettre à jour le token FCM du device

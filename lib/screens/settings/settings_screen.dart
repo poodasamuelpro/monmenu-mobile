@@ -99,6 +99,12 @@ class SettingsScreen extends StatelessWidget {
               label: 'Plans & Paiement',
               onTap: () => context.go('/dashboard/plans'),
             ),
+            // P3 — suppression de compte (parité web dashboard/parametres)
+            _SettingsTile(
+              icon: Icons.person_remove_rounded,
+              label: 'Mon compte (suppression)',
+              onTap: () => context.go('/dashboard/settings/compte'),
+            ),
 
             const SizedBox(height: 16),
 
