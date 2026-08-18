@@ -95,6 +95,14 @@ class AppDrawer extends StatelessWidget {
                     route: '/dashboard/menu',
                     currentRoute: route,
                   ),
+                  // P2 — parité sidebar web : Suppléments = 3e entrée après Menu
+                  // (src/pages/dashboard.ts l.40-64)
+                  _NavItem(
+                    icon: Icons.add_circle_outline_rounded,
+                    label: 'Suppléments',
+                    route: '/dashboard/supplements',
+                    currentRoute: route,
+                  ),
                   _NavItem(
                     icon: Icons.bar_chart_rounded,
                     label: 'Statistiques',

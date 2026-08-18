@@ -419,6 +419,82 @@ class ApiService {
     }
   }
 
+  // ── Suppléments (parité web api-supplements.ts) ────────────────────────────
+  // CSRF : les requêtes Bearer sont exemptées côté backend (middleware
+  // api-supplements.ts) — aucun header supplémentaire requis.
+
+  /// GET /dashboard/supplements
+  /// Retourne : { supplements: [{id, nom, prix, photo_url, photo_r2_key,
+  ///              actif, ordre_affichage, created_at, updated_at}] }
+  Future<ApiResponse> getSupplements() async => get('/dashboard/supplements');
+
+  /// GET /dashboard/supplements/limite
+  /// Retourne : { actif, limite, utilises }
+  Future<ApiResponse> getSupplementLimite() async =>
+      get('/dashboard/supplements/limite');
+
+  /// POST /dashboard/supplements
+  /// Body : { nom (1-100), prix (0-999999), actif=true, ordre=0 }
+  /// Retourne : 201 { success, id }
+  Future<ApiResponse> createSupplement(Map<String, dynamic> data) async =>
+      post('/dashboard/supplements', data);
+
+  /// PATCH /dashboard/supplements/:id — au moins un champ requis
+  /// Retourne : { success }
+  Future<ApiResponse> updateSupplement(String id, Map<String, dynamic> data) async =>
+      patch('/dashboard/supplements/$id', data);
+
+  /// DELETE /dashboard/supplements/:id — soft-delete + purge R2 côté serveur
+  /// Retourne : { success }
+  Future<ApiResponse> deleteSupplement(String id) async =>
+      delete('/dashboard/supplements/$id');
+
+  /// POST /dashboard/supplements/:id/image — multipart champ 'file'
+  /// (jpeg/png/webp/gif, max 5 Mo). Le serveur purge automatiquement
+  /// l'ancienne photo_r2_key lors du remplacement.
+  /// Retourne : { success, url, key }
+  Future<ApiResponse> uploadSupplementImage(String id, String filePath) async {
+    try {
+      final token = _authService.accessToken;
+      if (token == null || token.length < AppConfig.tokenMinLength) {
+        return ApiResponse.failure(401, 'Token manquant. Reconnectez-vous.');
+      }
+
+      final uri = _buildUri('/dashboard/supplements/$id/image');
+      final request = http.MultipartRequest('POST', uri);
+      request.headers['Authorization'] = 'Bearer $token';
+      request.headers['Accept'] = 'application/json';
+
+      final file = File(filePath);
+      if (!file.existsSync()) {
+        return ApiResponse.failure(0, 'Fichier image introuvable.');
+      }
+      final ext = filePath.split('.').last.toLowerCase();
+      final fileBytes = await file.readAsBytes();
+      request.files.add(http.MultipartFile.fromBytes(
+        'file',
+        fileBytes,
+        filename: 'supplement.$ext',
+      ));
+
+      final streamedResponse =
+          await request.send().timeout(const Duration(seconds: 60));
+      final response = await http.Response.fromStream(streamedResponse);
+
+      if (kDebugMode) {
+        debugPrint('[ApiService] uploadSupplementImage status=${response.statusCode}');
+      }
+      return _parseResponse(response);
+    } on SocketException {
+      return ApiResponse.failure(0, 'Pas de connexion internet.');
+    } on TimeoutException {
+      return ApiResponse.failure(0, 'Délai d\'upload dépassé. Réessayez.');
+    } catch (e) {
+      if (kDebugMode) debugPrint('[ApiService] uploadSupplementImage error: $e');
+      return ApiResponse.failure(0, 'Erreur lors de l\'upload image.');
+    }
+  }
+
   // ── Notifications restaurant ───────────────────────────────────────────────
 
   /// GET /dashboard/notifications/liste?page=&limit=&non_lues=

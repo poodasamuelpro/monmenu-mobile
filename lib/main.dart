@@ -28,6 +28,7 @@ import 'screens/dashboard/dashboard_screen.dart';
 import 'screens/commandes/commandes_screen.dart';
 import 'screens/commandes/commande_detail_screen.dart';
 import 'screens/menu/menu_screen.dart';
+import 'screens/supplements/supplements_screen.dart';
 import 'screens/stats/stats_screen.dart';
 import 'screens/settings/settings_screen.dart';
 import 'screens/plans/plans_screen.dart';
@@ -178,6 +179,11 @@ class _MonMenuAppState extends State<MonMenuApp> {
         GoRoute(
           path: '/dashboard/menu',
           builder: (_, __) => const MenuScreen(),
+        ),
+        // P2 — parité web : /dashboard/supplements (3e entrée sidebar)
+        GoRoute(
+          path: '/dashboard/supplements',
+          builder: (_, __) => const SupplementsScreen(),
         ),
         GoRoute(
           path: '/dashboard/stats',
