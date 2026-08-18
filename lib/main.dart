@@ -115,7 +115,32 @@ class _MonMenuAppState extends State<MonMenuApp> {
             state.uri.path.startsWith('/forgot-password');
 
         if (!isLoggedIn && !isAuthRoute) return '/login';
-        if (isLoggedIn && isAuthRoute) return '/dashboard/commandes';
+
+        // ── P1 — parité web acces-tenant.ts : tenant bloqué (inactif/essai
+        // expiré) = accès abonnement seul. Jamais éjecté de sa session, mais
+        // confiné aux pages permettant de régulariser (plans, paramètres,
+        // changement de mot de passe, notifications).
+        final tenant = _authService.tenant;
+        final accesAbonnementSeul = tenant?.accesAbonnementSeul ?? false;
+
+        if (isLoggedIn && isAuthRoute) {
+          return accesAbonnementSeul
+              ? '/dashboard/plans'
+              : '/dashboard/commandes';
+        }
+
+        if (isLoggedIn && accesAbonnementSeul) {
+          const routesPermisesBloque = [
+            '/dashboard/plans', // inclut /dashboard/plans/historique
+            '/dashboard/settings',
+            '/dashboard/change-password',
+            '/dashboard/notifications',
+          ];
+          final path = state.uri.path;
+          final permis = routesPermisesBloque.any((r) => path.startsWith(r));
+          if (!permis) return '/dashboard/plans';
+        }
+
         return null;
       },
       routes: [

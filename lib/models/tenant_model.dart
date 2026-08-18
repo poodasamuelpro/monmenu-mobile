@@ -168,12 +168,55 @@ class TenantModel {
   bool get isInactif => statut == 'inactif';
   bool get isEnAttenteConfirmation => statut == 'en_attente_confirmation';
 
-  /// SEC-04 : le statut 'en_attente_confirmation' donne accès à l'app
-  /// (le restaurant peut continuer à opérer pendant les 48h SLA de traitement).
-  bool get canAccess =>
-      statut == 'actif' ||
-      statut == 'essai' ||
-      statut == 'en_attente_confirmation';
+  // ── Modes d'accès — parité stricte avec le web (src/lib/acces-tenant.ts) ──
+  //
+  // Ordre de priorité web répliqué :
+  //   1. statut 'actif'                          → mode 'actif'              (accès complet)
+  //   2. statut 'essai' NON expiré               → mode 'essai'              (accès complet)
+  //      (essai expiré → continue les vérifications suivantes, comme le web)
+  //   3. statut 'suspendu'                       → mode 'suspendu'           (aucun accès)
+  //   4. paiement en_attente_confirmation <72h   → mode 'grace_confirmation' (accès complet)
+  //   5/6. autres (inactif, essai expiré, etc.)  → mode 'bloque'             (abonnement seul)
+  //
+  // NOTE : le web distingue 'paiement_initial' (abonnement en_attente_paiement_initial)
+  // de 'bloque' — les deux donnent le même droit (accès abonnement seul). Le mobile
+  // ne charge pas le statut d'abonnement au login, donc ces deux cas sont fusionnés
+  // sous 'bloque' : comportement utilisateur strictement identique.
+  String get modeAcces {
+    if (statut == 'actif') return 'actif';
+    if (statut == 'essai') {
+      final expire = essaiExpireLe;
+      final essaiValide = expire == null || DateTime.now().isBefore(expire);
+      if (essaiValide) return 'essai';
+      // Essai expiré → on continue les vérifications (parité web)
+    }
+    if (statut == 'suspendu') return 'suspendu';
+    // Fenêtre de grâce 72h : paiement soumis en attente de confirmation admin
+    final paiement = paiementEnAttente;
+    if ((statut == 'en_attente_confirmation' || paiement != null) &&
+        paiement != null &&
+        !paiement.estExpire) {
+      return 'grace_confirmation';
+    }
+    // Cas legacy : statut en_attente_confirmation sans objet paiement chargé
+    // → on accorde la grâce (SEC-04 : opérer pendant les 48h SLA), comme avant.
+    if (statut == 'en_attente_confirmation') return 'grace_confirmation';
+    return 'bloque';
+  }
+
+  /// Accès complet au dashboard (commandes, menu, stats…) — parité web `accesComplet`.
+  bool get accesComplet =>
+      modeAcces == 'actif' ||
+      modeAcces == 'essai' ||
+      modeAcces == 'grace_confirmation';
+
+  /// Accès restreint aux pages abonnement/paiement — parité web `accesAbonnementSeul`.
+  /// Un tenant bloqué n'est JAMAIS éjecté de sa session : il peut régulariser.
+  bool get accesAbonnementSeul => modeAcces == 'bloque';
+
+  /// SEC-04 + P1 : peut ouvrir une session (tout sauf suspendu).
+  /// Un tenant 'bloque' se connecte mais est redirigé vers /dashboard/plans.
+  bool get canAccess => modeAcces != 'suspendu';
 
   int? get joursEssaiRestants {
     if (essaiExpireLe == null) return null;

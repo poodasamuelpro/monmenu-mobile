@@ -88,8 +88,10 @@ class PaymentAlertBanner extends StatelessWidget {
       );
     }
 
-    // ── Inactif / Suspendu ────────────────────────────────────────────────
-    if (statut == 'inactif' || statut == 'suspendu') {
+    // ── Inactif / Suspendu / tout mode bloqué (parité acces-tenant.ts) ──────
+    // tenant.modeAcces == 'bloque' couvre inactif, essai expiré et tout statut
+    // legacy inconnu → accès abonnement seul, bandeau de régularisation.
+    if (statut == 'suspendu' || tenant.modeAcces == 'bloque') {
       return _Banner(
         color: AppColors.error,
         icon: Icons.block_rounded,
