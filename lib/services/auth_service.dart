@@ -258,18 +258,17 @@ class AuthService extends ChangeNotifier {
     _setLoading(false);
   }
 
-  // ── Mot de passe oublié — FLUX OTP À 6 CHIFFRES ──────────────────────────
-  // ⚠️ REMPLACEMENT COMPLET : l'ancienne implémentation utilisait le Supabase SDK
-  // directement (resetPasswordForEmail → envoie un LIEN) et verifyOTP avec
-  // OtpType.recovery (type non conforme au backend qui utilise type:'email').
-  //
-  // NOUVEAU FLUX (confirmé en lisant api-auth.ts) :
-  //   Étape 1 — POST /api/v1/auth/forgot-password → Supabase signInWithOtp()
-  //             → code à 6 chiffres envoyé par email, JAMAIS un lien
+  // ── Mot de passe oublié — FLUX OTP À 8 CHIFFRES ──────────────────────────
+  // FLUX ALIGNÉ SUR LE WEB (api-auth.ts HEAD 98223df, l.557-726) :
+  //   Étape 1 — POST /api/v1/auth/forgot-password → Supabase resetPasswordForEmail()
+  //             → code de récupération à 8 chiffres envoyé par email, JAMAIS un lien
   //   Étape 2 — POST /api/v1/auth/verify-otp { email, token }
+  //             → backend valide /^\d{8}$/ puis verifyOtp({ type: 'recovery' })
   //             → { access_token, refresh_token } renvoyés par le backend
   //   Étape 3 — POST /api/v1/auth/reset-password { password }
   //             → Bearer = access_token obtenu à l'étape 2 (pas le token de session)
+  //             → backend rejette un mot de passe identique à l'ancien (422)
+  //             → signout global de toutes les sessions après succès
   //
   // NOTE : les appels réseau se font dans forgot_password_screen.dart via ApiService
   // (même raison que changePassword : éviter la dépendance circulaire).
@@ -285,12 +284,12 @@ class AuthService extends ChangeNotifier {
     return null; // OK
   }
 
-  /// Validation OTP pour étape 2 (exactement 6 chiffres)
+  /// Validation OTP pour étape 2 (exactement 8 chiffres — parité web /^\d{8}$/)
   String? validateOtpCode(String otp) {
     final trimmed = otp.trim();
-    if (trimmed.length != 6) return 'Le code doit contenir exactement 6 chiffres.';
-    if (!RegExp(r'^\d{6}$').hasMatch(trimmed)) {
-      return 'Le code doit être numérique (6 chiffres).';
+    if (trimmed.length != 8) return 'Le code doit contenir exactement 8 chiffres.';
+    if (!RegExp(r'^\d{8}$').hasMatch(trimmed)) {
+      return 'Le code doit être numérique (8 chiffres).';
     }
     return null; // OK
   }

@@ -1,13 +1,13 @@
 // lib/screens/auth/forgot_password_screen.dart
-// Flux réinitialisation mot de passe — 3 étapes avec code OTP à 6 chiffres
+// Flux réinitialisation mot de passe — 3 étapes avec code OTP à 8 chiffres
 //
-// FLUX CORRECT (confirmé en lisant api-auth.ts du backend Workers) :
+// FLUX CORRECT (confirmé en lisant api-auth.ts du backend Workers, HEAD 98223df) :
 //   Étape 1 — POST /api/v1/auth/forgot-password { email }
-//             → Backend appelle supabase.auth.signInWithOtp() (code 6 chiffres, PAS un lien)
+//             → Backend appelle supabase.auth.resetPasswordForEmail() (code 8 chiffres, PAS un lien)
 //             → Réponse neutre { message } (ne révèle pas si le compte existe)
 //   Étape 2 — POST /api/v1/auth/verify-otp { email, token }
-//             → token doit correspondre au regex /^\d{6}$/
-//             → Backend appelle supabase.auth.verifyOtp({ type: 'email' })
+//             → token doit correspondre au regex /^\d{8}$/ (api-auth.ts l.617)
+//             → Backend appelle supabase.auth.verifyOtp({ type: 'recovery' })
 //             → Réponse : { access_token, refresh_token, message }
 //             → L'access_token est conservé en mémoire pour l'étape 3
 //   Étape 3 — POST /api/v1/auth/reset-password { password }
@@ -38,10 +38,12 @@ class ForgotPasswordScreen extends StatefulWidget {
 class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
   int _step = 1; // 1: email, 2: OTP, 3: new password
   final _emailCtrl = TextEditingController();
+  // 8 chiffres — parité stricte avec le backend web (regex /^\d{8}$/)
+  static const int _otpLength = 8;
   final List<TextEditingController> _otpControllers =
-      List.generate(6, (_) => TextEditingController());
+      List.generate(_otpLength, (_) => TextEditingController());
   final List<FocusNode> _otpFocusNodes =
-      List.generate(6, (_) => FocusNode());
+      List.generate(_otpLength, (_) => FocusNode());
   final _newPasswordCtrl = TextEditingController();
   final _confirmPasswordCtrl = TextEditingController();
 
@@ -115,7 +117,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
       _startResendCooldown();
       _showSnack(
         resp.data?['message'] as String? ??
-            'Si ce compte existe, un code à 6 chiffres a été envoyé.',
+            'Si ce compte existe, un code de récupération à 8 chiffres a été envoyé à votre adresse.',
         success: true,
       );
     } else {
@@ -145,7 +147,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
       '/auth/verify-otp',
       {
         'email': _emailCtrl.text.trim(),
-        'token': _otpValue, // exactement 6 chiffres, validé ci-dessus
+        'token': _otpValue, // exactement 8 chiffres, validé ci-dessus
       },
     );
 
@@ -304,7 +306,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
         const Text('Mot de passe oublié ?', style: AppTextStyles.h2),
         const SizedBox(height: 6),
         const Text(
-          'Entrez votre email pour recevoir un code de vérification à 6 chiffres.',
+          'Entrez votre email pour recevoir un code de récupération à 8 chiffres.',
           style: TextStyle(color: AppColors.gray400, fontSize: 13),
         ),
         const SizedBox(height: 24),
@@ -354,7 +356,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
           text: TextSpan(
             style: const TextStyle(color: AppColors.gray400, fontSize: 13),
             children: [
-              const TextSpan(text: 'Code à 6 chiffres envoyé à '),
+              const TextSpan(text: 'Code à 8 chiffres envoyé à '),
               TextSpan(
                 text: _emailCtrl.text,
                 style: const TextStyle(
@@ -367,14 +369,14 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
         ),
         const SizedBox(height: 28),
 
-        // OTP boxes — 6 chiffres numériques uniquement
+        // OTP boxes — 8 chiffres numériques uniquement (parité backend /^\d{8}$/)
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: List.generate(6, (i) => _OtpBox(
+          children: List.generate(_otpLength, (i) => _OtpBox(
             controller: _otpControllers[i],
             focusNode: _otpFocusNodes[i],
             onChanged: (v) {
-              if (v.isNotEmpty && i < 5) {
+              if (v.isNotEmpty && i < _otpLength - 1) {
                 _otpFocusNodes[i + 1].requestFocus();
               }
               if (v.isEmpty && i > 0) {
@@ -392,7 +394,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
         SizedBox(
           height: 50,
           child: ElevatedButton(
-            onPressed: (_otpValue.length == 6 && !_isSubmitting) ? _verifyOtp : null,
+            onPressed: (_otpValue.length == _otpLength && !_isSubmitting) ? _verifyOtp : null,
             child: _isSubmitting
                 ? const SizedBox(
                     width: 20, height: 20,
@@ -598,8 +600,9 @@ class _OtpBox extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // 36px de large × 8 cases + espacement : tient sur les écrans 320dp
     return SizedBox(
-      width: 44, height: 52,
+      width: 36, height: 48,
       child: TextFormField(
         controller: controller,
         focusNode: focusNode,
@@ -608,7 +611,7 @@ class _OtpBox extends StatelessWidget {
         maxLength: 1,
         inputFormatters: [FilteringTextInputFormatter.digitsOnly],
         style: const TextStyle(
-          fontSize: 20, fontWeight: FontWeight.w700,
+          fontSize: 18, fontWeight: FontWeight.w700,
           color: AppColors.gray900,
         ),
         decoration: InputDecoration(
