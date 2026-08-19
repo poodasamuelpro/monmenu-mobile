@@ -369,10 +369,13 @@ class ApiService {
   // ── Upload image ───────────────────────────────────────────────────────────
 
   /// POST /dashboard/upload-image — Upload vers R2 (multipart/form-data)
-  /// Champ: file (File image — jpeg/png/webp/gif, max 5MB)
+  /// Champs: file (File image — jpeg/png/webp/gif, max 5MB)
+  ///         ancienne_cle (optionnel) — clé R2 de l'ancien fichier à purger.
+  ///         Contrat web (api-dashboard.ts l.1940-2060) : la clé doit commencer
+  ///         par `${tenant_id}/` et ne pas contenir '..' — validée côté serveur.
   /// Retourne: { success, url, key } — url = URL publique via /dashboard/media/:key
   /// SEC-02: token jamais loggé
-  Future<ApiResponse> uploadImage(String filePath) async {
+  Future<ApiResponse> uploadImage(String filePath, {String? ancienneCle}) async {
     try {
       final token = _authService.accessToken;
       if (token == null || token.length < AppConfig.tokenMinLength) {
@@ -384,6 +387,11 @@ class ApiService {
 
       request.headers['Authorization'] = 'Bearer $token';
       request.headers['Accept'] = 'application/json';
+
+      // P4 — purge R2 de l'ancienne image lors du remplacement (parité web)
+      if (ancienneCle != null && ancienneCle.isNotEmpty) {
+        request.fields['ancienne_cle'] = ancienneCle;
+      }
 
       final file = File(filePath);
       if (!file.existsSync()) {

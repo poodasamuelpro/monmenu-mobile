@@ -1,9 +1,15 @@
 // lib/screens/restaurant/apparence_screen.dart
 // Apparence restaurant — couleur primaire, logo, bannière
+//
+// P4 — UPLOAD RÉEL (parité web api-dashboard.ts) :
+//   POST  /dashboard/upload-image  : multipart 'file' + 'ancienne_cle'
+//         (purge R2 de l'ancien fichier côté serveur — l.1940-2060)
+//   PATCH /dashboard/apparence     : { couleur_primaire?, logo_url?, banniere_url? }
+//         (couleurs #RRGGBB — l.1374-1415)
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
-import 'package:url_launcher/url_launcher.dart';
 import '../../services/api_service.dart';
 import '../../services/auth_service.dart';
 import '../../theme/app_theme.dart';
@@ -26,6 +32,10 @@ class _ApparenceScreenState extends State<ApparenceScreen> {
   String? _logoUrl;
   String? _banniereUrl;
   String? _nomRestaurant;
+
+  // Uploads en cours (désactive le bouton correspondant)
+  bool _isUploadingLogo = false;
+  bool _isUploadingBanniere = false;
 
   // Palette de couleurs prédéfinies
   static const _palette = [
@@ -167,54 +177,106 @@ class _ApparenceScreenState extends State<ApparenceScreen> {
     );
   }
 
-  void _showUploadInfo(String type) {
-    showDialog(
-      context: context,
-      builder: (_) => AlertDialog(
-        title: Text('Upload $type'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'L\'upload de $type est disponible depuis la version web de MonMenu.',
-              style: const TextStyle(fontSize: 14, color: AppColors.gray600),
-            ),
-            const SizedBox(height: 12),
-            const Text(
-              'Accédez à :',
-              style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: AppColors.gray700),
-            ),
-            const SizedBox(height: 4),
-            const SelectableText(
-              'https://monmenu.app/dashboard/apparence',
-              style: TextStyle(fontSize: 13, color: AppColors.primary),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Fermer'),
-          ),
-          ElevatedButton.icon(
-            onPressed: () async {
-              Navigator.pop(context);
-              final uri = Uri.parse('https://monmenu.app/dashboard/apparence');
-              if (await canLaunchUrl(uri)) {
-                await launchUrl(uri, mode: LaunchMode.externalApplication);
-              }
-            },
-            icon: const Icon(Icons.open_in_new_rounded, size: 16),
-            label: const Text('Ouvrir le web'),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.primary,
-              foregroundColor: Colors.white,
-            ),
-          ),
-        ],
-      ),
+  // ── P4 : extraire la clé R2 depuis l'URL publique /dashboard/media/:key ───
+  // Le contrat web exige que 'ancienne_cle' commence par `${tenant_id}/`.
+  // Les URLs renvoyées par le backend sont de la forme .../dashboard/media/<cle>
+  // (cle encodée URL). Si le format ne correspond pas, on n'envoie rien :
+  // le serveur validera de toute façon la clé (sécurité côté backend).
+  String? _extraireCleR2(String? url) {
+    if (url == null || url.isEmpty) return null;
+    const marqueur = '/dashboard/media/';
+    final idx = url.indexOf(marqueur);
+    if (idx == -1) return null;
+    final cle = Uri.decodeComponent(url.substring(idx + marqueur.length));
+    if (cle.isEmpty || cle.contains('..')) return null;
+    return cle;
+  }
+
+  // ── P4 : upload réel logo / bannière ──────────────────────────────────
+  // 1. Sélection galerie (ImagePicker, compression intégrée)
+  // 2. POST /dashboard/upload-image avec ancienne_cle (purge R2 côté serveur)
+  // 3. PATCH /dashboard/apparence { logo_url | banniere_url } immédiat
+  Future<void> _uploadMedia({required bool estLogo}) async {
+    if (estLogo ? _isUploadingLogo : _isUploadingBanniere) return;
+
+    final api = context.read<ApiService>();
+
+    XFile? picked;
+    try {
+      final picker = ImagePicker();
+      picked = await picker.pickImage(
+        source: ImageSource.gallery,
+        maxWidth: estLogo ? 800 : 1600,
+        maxHeight: estLogo ? 800 : 1600,
+        imageQuality: 85,
+      );
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Impossible de sélectionner une image'),
+          backgroundColor: AppColors.error,
+        ));
+      }
+      return;
+    }
+    if (picked == null || !mounted) return;
+
+    setState(() {
+      if (estLogo) {
+        _isUploadingLogo = true;
+      } else {
+        _isUploadingBanniere = true;
+      }
+    });
+
+    // Ancienne clé R2 à purger (extraite de l'URL actuelle)
+    final ancienneCle = _extraireCleR2(estLogo ? _logoUrl : _banniereUrl);
+
+    final resp = await api.uploadImage(picked.path, ancienneCle: ancienneCle);
+
+    if (!mounted) return;
+
+    if (!resp.success || resp.data?['url'] == null) {
+      setState(() {
+        _isUploadingLogo = false;
+        _isUploadingBanniere = false;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(resp.error ?? 'Erreur lors de l\'upload'),
+        backgroundColor: AppColors.error,
+      ));
+      return;
+    }
+
+    final nouvelleUrl = resp.data!['url'] as String;
+
+    // Persister immédiatement dans l'apparence (PATCH partiel — contrat web)
+    final patchResp = await api.updateApparence(
+      estLogo ? {'logo_url': nouvelleUrl} : {'banniere_url': nouvelleUrl},
     );
+
+    if (!mounted) return;
+    setState(() {
+      _isUploadingLogo = false;
+      _isUploadingBanniere = false;
+      if (patchResp.success) {
+        if (estLogo) {
+          _logoUrl = nouvelleUrl;
+        } else {
+          _banniereUrl = nouvelleUrl;
+        }
+      }
+    });
+
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text(
+        patchResp.success
+            ? (estLogo ? 'Logo mis à jour' : 'Bannière mise à jour')
+            : (patchResp.error ?? 'Image envoyée mais non enregistrée'),
+      ),
+      backgroundColor:
+          patchResp.success ? AppColors.success : AppColors.error,
+    ));
   }
 
   @override
@@ -257,22 +319,24 @@ class _ApparenceScreenState extends State<ApparenceScreen> {
         _buildColorSection(),
         const SizedBox(height: 16),
 
-        // Logo
+        // Logo — upload réel (P4)
         _buildMediaSection(
           title: 'Logo du restaurant',
           icon: Icons.image_rounded,
           imageUrl: _logoUrl,
-          onUpload: () => _showUploadInfo('logo'),
-          ratio: '1:1 — carré, PNG/JPG, max 2 Mo',
+          onUpload: () => _uploadMedia(estLogo: true),
+          isUploading: _isUploadingLogo,
+          ratio: '1:1 — carré, PNG/JPG, max 5 Mo',
         ),
         const SizedBox(height: 16),
 
-        // Bannière
+        // Bannière — upload réel (P4)
         _buildMediaSection(
           title: 'Image de bannière',
           icon: Icons.panorama_rounded,
           imageUrl: _banniereUrl,
-          onUpload: () => _showUploadInfo('bannière'),
+          onUpload: () => _uploadMedia(estLogo: false),
+          isUploading: _isUploadingBanniere,
           ratio: '16:9 — paysage, PNG/JPG, max 5 Mo',
           aspectRatio: 16 / 9,
         ),
@@ -423,6 +487,7 @@ class _ApparenceScreenState extends State<ApparenceScreen> {
     String? imageUrl,
     required VoidCallback onUpload,
     required String ratio,
+    bool isUploading = false,
     double aspectRatio = 1.0,
   }) {
     return Container(
@@ -442,9 +507,9 @@ class _ApparenceScreenState extends State<ApparenceScreen> {
         Text(ratio, style: const TextStyle(fontSize: 12, color: AppColors.gray400)),
         const SizedBox(height: 12),
 
-        // Image ou placeholder
+        // Image ou placeholder — toucher pour uploader (P4)
         GestureDetector(
-          onTap: onUpload,
+          onTap: isUploading ? null : onUpload,
           child: AspectRatio(
             aspectRatio: aspectRatio,
             child: Container(
@@ -453,16 +518,25 @@ class _ApparenceScreenState extends State<ApparenceScreen> {
                 borderRadius: BorderRadius.circular(8),
                 border: Border.all(color: AppColors.gray200, style: BorderStyle.solid),
               ),
-              child: imageUrl != null
-                  ? ClipRRect(
-                      borderRadius: BorderRadius.circular(8),
-                      child: Image.network(
-                        imageUrl,
-                        fit: BoxFit.cover,
-                        errorBuilder: (_, __, ___) => _uploadPlaceholder(),
+              child: isUploading
+                  ? const Center(
+                      child: SizedBox(
+                        width: 26, height: 26,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2.5, color: AppColors.primary,
+                        ),
                       ),
                     )
-                  : _uploadPlaceholder(),
+                  : imageUrl != null
+                      ? ClipRRect(
+                          borderRadius: BorderRadius.circular(8),
+                          child: Image.network(
+                            imageUrl,
+                            fit: BoxFit.cover,
+                            errorBuilder: (_, __, ___) => _uploadPlaceholder(),
+                          ),
+                        )
+                      : _uploadPlaceholder(),
             ),
           ),
         ),
@@ -471,12 +545,14 @@ class _ApparenceScreenState extends State<ApparenceScreen> {
   }
 
   Widget _uploadPlaceholder() {
-    return Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+    return const Column(mainAxisAlignment: MainAxisAlignment.center, children: [
       Icon(Icons.upload_rounded, size: 32, color: AppColors.gray300),
-      const SizedBox(height: 8),
-      const Text('Toucher pour changer', style: TextStyle(fontSize: 12, color: AppColors.gray400)),
-      const SizedBox(height: 4),
-      const Text('Via la version web', style: TextStyle(fontSize: 11, color: AppColors.gray300)),
+      SizedBox(height: 8),
+      Text('Toucher pour ajouter une image',
+          style: TextStyle(fontSize: 12, color: AppColors.gray400)),
+      SizedBox(height: 4),
+      Text('Depuis votre galerie',
+          style: TextStyle(fontSize: 11, color: AppColors.gray300)),
     ]);
   }
 }
