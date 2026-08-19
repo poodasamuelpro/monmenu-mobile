@@ -1,5 +1,8 @@
 // lib/main.dart — MonMenu Manager
 // Supabase init + go_router + providers + auth guard + notifications + FCM
+import 'dart:async';
+
+import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -14,6 +17,7 @@ import 'services/api_service.dart';
 import 'services/realtime_service.dart';
 import 'services/notification_service.dart';
 import 'services/fcm_service.dart';
+import 'services/payment_upload_service.dart';
 import 'providers/commandes_provider.dart';
 import 'providers/dashboard_provider.dart';
 import 'theme/app_theme.dart';
@@ -90,6 +94,9 @@ class _MonMenuAppState extends State<MonMenuApp> {
   late final RealtimeService _realtimeService;
   late final NotificationService _notificationService;
   late final FCMService _fcmService;
+  late final PaymentUploadService _paymentUploadService;
+  StreamSubscription<List<ConnectivityResult>>? _connectivitySub;
+  bool _retryEnCours = false;
   late final CommandesProvider _commandesProvider;
   late final DashboardProvider _dashboardProvider;
   late final GoRouter _router;
@@ -104,9 +111,23 @@ class _MonMenuAppState extends State<MonMenuApp> {
     _fcmService = FCMService();
     _commandesProvider = CommandesProvider(_apiService, _realtimeService);
     _dashboardProvider = DashboardProvider(_apiService);
+    _paymentUploadService = PaymentUploadService(api: _apiService);
 
     // ── Initialiser les notifications locales au démarrage ─────────────────
     _notificationService.init();
+
+    // ── M6 — reprise de la file d'upload de preuve de paiement ────────────
+    // 1. Au démarrage (garde auth : jamais sans session valide)
+    WidgetsBinding.instance.addPostFrameCallback((_) => _retryPendingUpload());
+    // 2. Au regain de connectivité (ConnectivityChanged → wifi/mobile/ethernet)
+    _connectivitySub =
+        Connectivity().onConnectivityChanged.listen((results) {
+      final online = results.any((r) =>
+          r == ConnectivityResult.wifi ||
+          r == ConnectivityResult.mobile ||
+          r == ConnectivityResult.ethernet);
+      if (online) _retryPendingUpload();
+    });
 
     // ── go_router ─────────────────────────────────────────────────────────────
     _router = GoRouter(
@@ -392,8 +413,25 @@ class _MonMenuAppState extends State<MonMenuApp> {
     );
   }
 
+  // M6 — relance l'upload de preuve en attente (SEC-07 : le service
+  // re-vérifie le statut serveur et annule si en_attente_confirmation/actif).
+  // Garde auth + anti-réentrance (plusieurs événements réseau rapprochés).
+  Future<void> _retryPendingUpload() async {
+    if (!_authService.isAuthenticated) return;
+    if (_retryEnCours) return;
+    _retryEnCours = true;
+    try {
+      await _paymentUploadService.retryPendingUploadIfNeeded();
+    } catch (e) {
+      if (kDebugMode) debugPrint('[main] retryPendingUpload: $e');
+    } finally {
+      _retryEnCours = false;
+    }
+  }
+
   @override
   void dispose() {
+    _connectivitySub?.cancel();
     _realtimeService.dispose();
     _notificationService.dispose();
     super.dispose();
