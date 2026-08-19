@@ -473,6 +473,45 @@ class StatsModel {
     );
   }
 
+  /// M8 — Parse le contrat RÉEL de GET /dashboard/stats-journalieres
+  /// (api-dashboard.ts l.2115-2145) :
+  /// { stats: [{date, nb_commandes, nb_commandes_livrees,
+  ///            nb_commandes_annulees, chiffre_affaires,
+  ///            frais_livraison_total, top_produits}],
+  ///   totaux: {nb_commandes, chiffre_affaires, nb_jours_actifs,
+  ///            moyenne_journaliere},
+  ///   periode_jours }
+  /// `stats` est trié DESCENDANT par date côté web → remis en ASC ici pour
+  /// que les graphiques (labels/values/caValues) soient chronologiques.
+  factory StatsModel.fromStatsJournalieres(Map<String, dynamic> json) {
+    final rawStats = (json['stats'] as List?) ?? const [];
+    final items = rawStats
+        .whereType<Map>()
+        .map((e) => StatJournaliere.fromJson(Map<String, dynamic>.from(e)))
+        .toList()
+      ..sort((a, b) => a.date.compareTo(b.date)); // ASC chronologique
+
+    final labels = items
+        .map((s) =>
+            '${s.date.month.toString().padLeft(2, '0')}-${s.date.day.toString().padLeft(2, '0')}')
+        .toList();
+    final values = items.map((s) => s.nbCommandes).toList();
+    final caValues = items.map((s) => s.chiffreAffaires).toList();
+
+    final totaux = json['totaux'] is Map
+        ? Map<String, dynamic>.from(json['totaux'] as Map)
+        : <String, dynamic>{};
+
+    return StatsModel(
+      // Totaux de la période (nb_commandes / chiffre_affaires)
+      commandesMois: (totaux['nb_commandes'] as num?)?.toInt() ?? 0,
+      caMois: _toDouble(totaux['chiffre_affaires']),
+      labels: labels,
+      values: values,
+      caValues: caValues,
+    );
+  }
+
   static double _toDouble(dynamic v) {
     if (v == null) return 0.0;
     if (v is num) return v.toDouble();

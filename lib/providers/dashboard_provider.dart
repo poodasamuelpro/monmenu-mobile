@@ -144,16 +144,18 @@ class DashboardProvider extends ChangeNotifier {
 
   Future<void> loadStatsJournalieres({int jours = 30}) async {
     // NOTE: /dashboard/stats retourne déjà labels/values/ca_values (30 jours)
-    // Ce endpoint est conservé pour compatibilité mais n'est plus nécessaire
-    // si loadStats() a déjà été appelé (les données 30j sont dans StatsModel)
-    // On l'appelle seulement si _stats est null
+    // Ce endpoint sert de fallback si loadStats() n'a rien chargé.
+    // M8 — le contrat réel de GET /stats-journalieres est
+    // { stats: [...], totaux: {...}, periode_jours } (api-dashboard.ts
+    // l.2115-2145) : parsé via StatsModel.fromStatsJournalieres (l'ancien
+    // StatsModel.fromJson attendait labels/values/ca_values → toujours vide).
     if (_stats != null) return;
     try {
       final resp = await _api.getStatsJournalieres(jours: jours);
       if (resp.success && resp.data != null) {
         final data = resp.data!;
         if (_stats == null) {
-          _stats = StatsModel.fromJson(data);
+          _stats = StatsModel.fromStatsJournalieres(data);
           notifyListeners();
         }
       }
