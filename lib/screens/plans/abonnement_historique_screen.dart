@@ -8,6 +8,7 @@ import '../../services/api_service.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/app_drawer.dart';
 import '../../widgets/loading_widget.dart' as lw;
+import '../../widgets/nav_buttons.dart';
 
 class AbonnementHistoriqueScreen extends StatefulWidget {
   const AbonnementHistoriqueScreen({super.key});
@@ -101,21 +102,8 @@ class _AbonnementHistoriqueScreenState
       backgroundColor: AppColors.background,
       appBar: AppBar(
         title: const Text('Historique des abonnements'),
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back_rounded),
-          onPressed: () => context.canPop() ? context.pop() : context.go('/dashboard/plans'),
-          tooltip: 'Retour',
-        ),
-        actions: [
-          // P9 — accès menu même en navigation profonde
-          Builder(
-            builder: (ctx) => IconButton(
-              icon: const Icon(Icons.menu_rounded),
-              tooltip: 'Menu',
-              onPressed: () => Scaffold.of(ctx).openDrawer(),
-            ),
-          ),
-        ],
+        leadingWidth: 104,
+        leading: const NavButtons(),
       ),
       drawer: const AppDrawer(),
       body: RefreshIndicator(

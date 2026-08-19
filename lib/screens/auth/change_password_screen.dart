@@ -98,10 +98,9 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
       backgroundColor: AppColors.background,
       appBar: AppBar(
         title: const Text('Changer le mot de passe'),
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back_rounded),
-          onPressed: () => context.pop(),
-        ),
+        leadingWidth: 104,
+
+        leading: const NavButtons(),
       ),
       body: SafeArea(
         child: SingleChildScrollView(

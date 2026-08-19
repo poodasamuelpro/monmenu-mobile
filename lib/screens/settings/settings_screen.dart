@@ -40,11 +40,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
       backgroundColor: AppColors.background,
       appBar: AppBar(
         title: const Text('Paramètres'),
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back_rounded),
-          onPressed: () => context.canPop() ? context.pop() : context.go('/dashboard/commandes'),
-          tooltip: 'Retour',
-        ),
+        leadingWidth: 104,
+
+        leading: const NavButtons(),
       ),
       drawer: const AppDrawer(),
       body: SingleChildScrollView(

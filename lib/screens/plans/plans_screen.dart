@@ -14,6 +14,7 @@ import '../../services/auth_service.dart';
 import '../../services/payment_upload_service.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/app_drawer.dart';
+import '../../widgets/nav_buttons.dart';
 import '../../widgets/loading_widget.dart' as lw;
 import '../../widgets/statut_badge.dart';
 
@@ -62,11 +63,8 @@ class _PlansScreenState extends State<PlansScreen> {
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(
-        leading: IconButton(
-          icon: const Icon(Icons.menu_rounded),
-          onPressed: () => Scaffold.maybeOf(context)?.openDrawer(),
-          tooltip: 'Menu',
-        ),
+        leadingWidth: 104,
+        leading: const NavButtons(),
         title: const Text('Plans & Paiement'),
         actions: [
           IconButton(

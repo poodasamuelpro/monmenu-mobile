@@ -17,6 +17,7 @@ import '../../services/api_service.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/app_drawer.dart';
 import '../../widgets/statut_badge.dart';
+import '../../widgets/nav_buttons.dart';
 
 class CommandeDetailScreen extends StatefulWidget {
   final String commandeId;
@@ -313,20 +314,8 @@ class _CommandeDetailScreenState extends State<CommandeDetailScreen> {
       backgroundColor: AppColors.background,
       appBar: AppBar(
         title: const Text('Détail commande'),
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back_rounded),
-          onPressed: () => context.pop(),
-        ),
-        actions: [
-          // P9 — accès menu même en navigation profonde
-          Builder(
-            builder: (ctx) => IconButton(
-              icon: const Icon(Icons.menu_rounded),
-              tooltip: 'Menu',
-              onPressed: () => Scaffold.of(ctx).openDrawer(),
-            ),
-          ),
-        ],
+        leadingWidth: 104,
+        leading: const NavButtons(),
       ),
       drawer: const AppDrawer(),
       body: _isLoading

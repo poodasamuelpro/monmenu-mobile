@@ -16,7 +16,8 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import '../../services/api_service.dart';
-import '../../theme/app_theme.dart';
+import '../../widgets/app_drawer.dart';
+import '../../widgets/nav_buttons.dart';
 
 class CompteScreen extends StatefulWidget {
   const CompteScreen({super.key});
@@ -131,12 +132,8 @@ class _CompteScreenState extends State<CompteScreen> {
       backgroundColor: AppColors.background,
       appBar: AppBar(
         title: const Text('Mon compte'),
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back_rounded),
-          onPressed: () =>
-              context.canPop() ? context.pop() : context.go('/dashboard/settings'),
-          tooltip: 'Retour',
-        ),
+        leadingWidth: 104,
+        leading: const NavButtons(),
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(20),

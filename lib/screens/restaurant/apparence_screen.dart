@@ -289,11 +289,9 @@ class _ApparenceScreenState extends State<ApparenceScreen> {
         foregroundColor: AppColors.gray900,
         elevation: 0,
         surfaceTintColor: Colors.transparent,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back_rounded),
-          onPressed: () => context.canPop() ? context.pop() : context.go('/dashboard/commandes'),
-          tooltip: 'Retour',
-        ),
+        leadingWidth: 104,
+
+        leading: const NavButtons(),
         bottom: const PreferredSize(
           preferredSize: Size.fromHeight(1),
           child: Divider(height: 1, color: AppColors.gray200),

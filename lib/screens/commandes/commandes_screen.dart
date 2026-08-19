@@ -9,6 +9,7 @@ import '../../services/notification_service.dart';
 import '../../services/realtime_service.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/app_drawer.dart';
+import '../../widgets/nav_buttons.dart';
 import '../../widgets/commande_card.dart';
 import '../../widgets/loading_widget.dart' as lw;
 import '../../widgets/payment_alert_banner.dart';
@@ -53,11 +54,8 @@ class _CommandesScreenState extends State<CommandesScreen> {
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(
-        leading: IconButton(
-          icon: const Icon(Icons.menu_rounded),
-          onPressed: () => Scaffold.maybeOf(context)?.openDrawer(),
-          tooltip: 'Menu',
-        ),
+        leadingWidth: 104,
+        leading: const NavButtons(),
         title: Row(
           children: [
             const Text('Commandes'),

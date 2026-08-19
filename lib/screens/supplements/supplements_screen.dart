@@ -150,12 +150,9 @@ class _SupplementsScreenState extends State<SupplementsScreen> {
       backgroundColor: AppColors.background,
       appBar: AppBar(
         title: const Text('Suppléments'),
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back_rounded),
-          onPressed: () =>
-              context.canPop() ? context.pop() : context.go('/dashboard/commandes'),
-          tooltip: 'Retour',
-        ),
+        leadingWidth: 104,
+
+        leading: const NavButtons(),
       ),
       drawer: const AppDrawer(),
       floatingActionButton: FloatingActionButton.extended(
