@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import 'package:fl_chart/fl_chart.dart';
 import '../../models/plan_model.dart';
+import '../../providers/commandes_provider.dart';
 import '../../providers/dashboard_provider.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/app_drawer.dart';
@@ -23,12 +24,15 @@ class _StatsScreenState extends State<StatsScreen> {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<DashboardProvider>().loadAll();
+      // [P5] Total serveur exact pour le KPI « Total commandes »
+      context.read<CommandesProvider>().loadCommandes();
     });
   }
 
   @override
   Widget build(BuildContext context) {
     final dashboard = context.watch<DashboardProvider>();
+    final totalServeur = context.watch<CommandesProvider>().totalServeur;
     final stats = dashboard.stats;
 
     return Scaffold(
@@ -65,7 +69,8 @@ class _StatsScreenState extends State<StatsScreen> {
                   children: [
                     Expanded(child: _KpiCard(
                       label: 'Total commandes',
-                      value: '${stats.totalCommandes}',
+                      // [P5] Total serveur exact ; fallback somme des statuts
+                      value: '${totalServeur > 0 ? totalServeur : stats.totalCommandes}',
                       icon: Icons.receipt_long_rounded,
                       color: AppColors.primary,
                     )),

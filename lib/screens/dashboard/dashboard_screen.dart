@@ -142,7 +142,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
               ],
 
               // ── Stats cards ───────────────────────────────────────────────
-              _StatsGrid(stats: dashboard.stats, isLoading: dashboard.isLoadingStats),
+              _StatsGrid(
+                stats: dashboard.stats,
+                isLoading: dashboard.isLoadingStats,
+                totalServeur: commandes.totalServeur,
+              ),
               const SizedBox(height: 20),
 
               // ── Graphique 30 jours ────────────────────────────────────────
@@ -239,8 +243,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
 class _StatsGrid extends StatelessWidget {
   final StatsModel? stats;
   final bool isLoading;
+  final int totalServeur;
 
-  const _StatsGrid({this.stats, required this.isLoading});
+  const _StatsGrid({
+    this.stats,
+    required this.isLoading,
+    this.totalServeur = 0,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -266,7 +275,9 @@ class _StatsGrid extends StatelessWidget {
         _StatCard(
           icon: Icons.receipt_long_rounded,
           label: 'Total commandes',
-          value: '${stats?.totalCommandes ?? 0}',
+          // [P5] Total serveur exact (GET /commandes → total) ; fallback sur
+          // la somme des statuts si les commandes ne sont pas encore chargées.
+          value: '${totalServeur > 0 ? totalServeur : (stats?.totalCommandes ?? 0)}',
           color: AppColors.primary,
         ),
         _StatCard(
@@ -284,8 +295,9 @@ class _StatsGrid extends StatelessWidget {
         ),
         _StatCard(
           icon: Icons.access_time_rounded,
-          label: 'En attente',
-          value: '${stats?.commandesPendantes ?? 0}',
+          label: 'En cours',
+          // [P5] total − livree − annulee (contrat web statuts={livree,annulee})
+          value: '${stats?.commandesEnCours(totalServeur) ?? 0}',
           color: AppColors.warning,
         ),
       ],

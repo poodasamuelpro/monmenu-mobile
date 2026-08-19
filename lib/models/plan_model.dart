@@ -375,12 +375,24 @@ class StatsModel {
   final List<int> values;            // 'values' (nb commandes/jour)
   final List<double> caValues;       // 'ca_values' (CA/jour)
 
-  // Propriétés calculées pour compatibilité avec l'UI existante
+  // Propriétés calculées pour compatibilité avec l'UI existante.
+  // Contrat web GET /dashboard/stats (api-dashboard.ts) :
+  // statuts = { livree, annulee } uniquement — pas de champ 'en_attente'.
+  int get commandesLivrees => (statuts['livree'] as num?)?.toInt() ?? 0;
+  int get commandesAnnulees => (statuts['annulee'] as num?)?.toInt() ?? 0;
   int get totalCommandes => (statuts.values.fold<int>(0, (sum, v) {
     return sum + ((v as num?)?.toInt() ?? 0);
   }));
   double get chiffreAffaires => caValues.fold(0.0, (a, b) => a + b);
-  int get commandesPendantes => (statuts['en_attente'] as num?)?.toInt() ?? 0;
+
+  /// [P5] Commandes en cours (ni livrées ni annulées) : total serveur exact
+  /// (GET /dashboard/commandes → total) − livree − annulee, borné ≥ 0.
+  /// Remplace commandesPendantes (statuts['en_attente'] : champ inexistant
+  /// dans le contrat web → affichait toujours 0).
+  int commandesEnCours(int totalServeur) {
+    final restant = totalServeur - commandesLivrees - commandesAnnulees;
+    return restant < 0 ? 0 : restant;
+  }
 
   // Conversion en StatJournaliere pour les graphiques
   List<StatJournaliere> get statsJournalieres {

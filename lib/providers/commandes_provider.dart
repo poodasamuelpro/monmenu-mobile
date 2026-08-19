@@ -20,6 +20,7 @@ class CommandesProvider extends ChangeNotifier {
   String? _error;
   String? _statutFilter;
   int _pendingCount = 0;
+  int _totalServeur = 0;
 
   CommandesProvider(this._api, this._realtime) {
     _realtime.onNouvelleCommande = _onNouvelleCommande;
@@ -31,6 +32,10 @@ class CommandesProvider extends ChangeNotifier {
   String? get error => _error;
   String? get statutFilter => _statutFilter;
   int get pendingCount => _pendingCount;
+
+  /// [P5] Total exact de commandes côté serveur (champ 'total' de
+  /// GET /dashboard/commandes, count exact toutes pages confondues).
+  int get totalServeur => _totalServeur;
 
   List<CommandeModel> get filteredCommandes {
     if (_statutFilter == null) return _commandes;
@@ -64,6 +69,7 @@ class CommandesProvider extends ChangeNotifier {
           }
         }
         _commandes = parsed;
+        _totalServeur = (resp.data?['total'] as num?)?.toInt() ?? parsed.length;
         _updatePendingCount();
       } else {
         _error = resp.error;
