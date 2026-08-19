@@ -247,6 +247,8 @@ class ProfilModel {
   final String? banniereUrl;
   final String? whatsappNumber;
   final String? domainPerso;
+  // M1 — email du restaurant (exposé par GET /dashboard/profil via ...tenantFinal)
+  final String? email;
   final String? planNom;
   final int commandesIncluses;
   final double? prixMensuel;
@@ -270,6 +272,7 @@ class ProfilModel {
     this.banniereUrl,
     this.whatsappNumber,
     this.domainPerso,
+    this.email,
     this.planNom,
     this.commandesIncluses = 0,
     this.prixMensuel,
@@ -295,6 +298,7 @@ class ProfilModel {
       banniereUrl: json['banniere_url'] as String?,
       whatsappNumber: json['whatsapp_number'] as String?,
       domainPerso: json['domaine_perso'] as String?,
+      email: json['email'] as String?,
       planNom: json['plan_nom'] as String?,
       commandesIncluses: (json['commandes_incluses'] as num?)?.toInt() ?? 0,
       prixMensuel: _toDoubleNullable(json['prix_mensuel']),

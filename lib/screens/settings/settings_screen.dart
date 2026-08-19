@@ -3,19 +3,38 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
+import '../../providers/dashboard_provider.dart';
+import '../../services/api_service.dart';
 import '../../services/auth_service.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/app_drawer.dart';
 import '../../widgets/payment_alert_banner.dart';
 import '../../widgets/statut_badge.dart';
 
-class SettingsScreen extends StatelessWidget {
+class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
+
+  @override
+  State<SettingsScreen> createState() => _SettingsScreenState();
+}
+
+class _SettingsScreenState extends State<SettingsScreen> {
+  @override
+  void initState() {
+    super.initState();
+    // M1 — charger le profil pour disposer de l'email du restaurant
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final dashboard = context.read<DashboardProvider>();
+      if (dashboard.profil == null) dashboard.loadProfil();
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
     final auth = context.watch<AuthService>();
     final tenant = auth.tenant;
+    final dashboard = context.watch<DashboardProvider>();
+    final profil = dashboard.profil;
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -93,6 +112,15 @@ class SettingsScreen extends StatelessWidget {
               icon: Icons.lock_outline_rounded,
               label: 'Changer le mot de passe',
               onTap: () => context.go('/dashboard/change-password'),
+            ),
+            // M1 — e-mail du restaurant (parité web dashboard/parametres)
+            _SettingsTile(
+              icon: Icons.alternate_email_rounded,
+              label: 'E-mail',
+              subtitle: (profil?.email?.isNotEmpty ?? false)
+                  ? profil!.email!
+                  : 'Non défini',
+              onTap: () => _editEmail(context, dashboard),
             ),
             _SettingsTile(
               icon: Icons.workspace_premium_rounded,
@@ -185,6 +213,94 @@ class SettingsScreen extends StatelessWidget {
     );
   }
 
+  // M1 — édition de l'e-mail du restaurant via PATCH /dashboard/parametres
+  // Contrainte web : `nom` est REQUIS (≥ 2 caractères) même pour ne changer
+  // que l'email → on renvoie le nom actuel du profil. Email vide → null côté web.
+  Future<void> _editEmail(
+      BuildContext context, DashboardProvider dashboard) async {
+    var profil = dashboard.profil;
+    if (profil == null) {
+      await dashboard.loadProfil();
+      profil = dashboard.profil;
+    }
+    if (profil == null || profil.nom.trim().length < 2) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Profil indisponible, réessayez plus tard.'),
+        ));
+      }
+      return;
+    }
+    if (!context.mounted) return;
+
+    final api = context.read<ApiService>();
+    final controller = TextEditingController(text: profil.email ?? '');
+    final emailRegex = RegExp(r'^[^\s@]+@[^\s@]+\.[^\s@]+$');
+    final formKey = GlobalKey<FormState>();
+
+    final nouveau = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('E-mail du restaurant'),
+        content: Form(
+          key: formKey,
+          child: TextFormField(
+            controller: controller,
+            keyboardType: TextInputType.emailAddress,
+            autocorrect: false,
+            decoration: const InputDecoration(
+              hintText: 'contact@restaurant.com',
+              helperText: 'Laisser vide pour supprimer l\'e-mail',
+            ),
+            validator: (v) {
+              final val = (v ?? '').trim();
+              if (val.isEmpty) return null; // vide autorisé → null côté web
+              if (!emailRegex.hasMatch(val)) return 'Adresse e-mail invalide';
+              return null;
+            },
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Annuler'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              if (formKey.currentState?.validate() ?? false) {
+                Navigator.pop(ctx, controller.text.trim());
+              }
+            },
+            child: const Text('Enregistrer'),
+          ),
+        ],
+      ),
+    );
+
+    if (nouveau == null) return; // annulé
+    if (nouveau == (profil.email ?? '')) return; // inchangé
+
+    final resp = await api.updateParametres({
+      'nom': profil.nom, // requis par le web (422 sinon)
+      'email': nouveau, // '' → null côté web
+    });
+    if (!context.mounted) return;
+    if (resp.success) {
+      await dashboard.loadProfil();
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('E-mail mis à jour'),
+          backgroundColor: AppColors.success,
+        ));
+      }
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(resp.error ?? 'Erreur lors de la mise à jour'),
+        backgroundColor: AppColors.error,
+      ));
+    }
+  }
+
   Future<void> _confirmLogout(BuildContext context, AuthService auth) async {
     final confirm = await showDialog<bool>(
       context: context,
@@ -230,11 +346,13 @@ class _SectionTitle extends StatelessWidget {
 class _SettingsTile extends StatelessWidget {
   final IconData icon;
   final String label;
+  final String? subtitle;
   final VoidCallback onTap;
 
   const _SettingsTile({
     required this.icon,
     required this.label,
+    this.subtitle,
     required this.onTap,
   });
 
@@ -255,12 +373,26 @@ class _SettingsTile extends StatelessWidget {
                 Icon(icon, size: 20, color: AppColors.gray500),
                 const SizedBox(width: 14),
                 Expanded(
-                  child: Text(
-                    label,
-                    style: const TextStyle(
-                      fontSize: 14, fontWeight: FontWeight.w500,
-                      color: AppColors.gray800,
-                    ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        label,
+                        style: const TextStyle(
+                          fontSize: 14, fontWeight: FontWeight.w500,
+                          color: AppColors.gray800,
+                        ),
+                      ),
+                      if (subtitle != null)
+                        Text(
+                          subtitle!,
+                          style: const TextStyle(
+                            fontSize: 12, color: AppColors.gray400,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                    ],
                   ),
                 ),
                 const Icon(
