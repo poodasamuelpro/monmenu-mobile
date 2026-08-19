@@ -250,6 +250,9 @@ class ProfilModel {
   // M1 — email du restaurant (exposé par GET /dashboard/profil via ...tenantFinal)
   final String? email;
   final String? planNom;
+  // M4 — plan_id exposé par GET /dashboard/profil (spread ...tenantFinal,
+  // déjà présent à web HEAD 98223df) → surlignage fiable du plan actuel
+  final String? planId;
   final int commandesIncluses;
   final double? prixMensuel;
   final String? pdvId;
@@ -274,6 +277,7 @@ class ProfilModel {
     this.domainPerso,
     this.email,
     this.planNom,
+    this.planId,
     this.commandesIncluses = 0,
     this.prixMensuel,
     this.pdvId,
@@ -300,6 +304,7 @@ class ProfilModel {
       domainPerso: json['domaine_perso'] as String?,
       email: json['email'] as String?,
       planNom: json['plan_nom'] as String?,
+      planId: json['plan_id'] as String?,
       commandesIncluses: (json['commandes_incluses'] as num?)?.toInt() ?? 0,
       prixMensuel: _toDoubleNullable(json['prix_mensuel']),
       pdvId: json['pdv_id'] as String?,

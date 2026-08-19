@@ -120,7 +120,13 @@ class _PlansScreenState extends State<PlansScreen> {
               else ...[
                 ...dashboard.plans.map((plan) => _PlanCard(
                   plan: plan,
-                  isCurrent: false, // plan.id non disponible dans ProfilModel plat (profil retourne plan_nom seulement)
+                  // M4 — plan_id exposé par GET /profil (web HEAD 98223df),
+                  // fallback sur plan_nom si plan_id absent/null
+                  isCurrent: (dashboard.profil?.planId != null &&
+                          dashboard.profil!.planId == plan.id) ||
+                      (dashboard.profil?.planId == null &&
+                          dashboard.profil?.planNom != null &&
+                          dashboard.profil!.planNom == plan.nom),
                   onSelect: () => _showUploadSheet(
                     context,
                     plan,

@@ -70,6 +70,13 @@ de `PATCH /supplements/:id` l.1042 (lire `photo_r2_key` avant UPDATE, purger R2
 si la photo change) pour couvrir aussi les mises à jour effectuées depuis le
 dashboard web.
 
+## 10. plan_id dans GET /dashboard/profil (M4 — aucun changement web requis)
+**Constat (HEAD 98223df)** : `GET /dashboard/profil` (`src/routes/api-dashboard.ts`
+l.1495-1541) retourne déjà `plan_id` (et `email`) via le spread `...tenantFinal`
+dont le select inclut ces colonnes. **Aucune modification web nécessaire** :
+le mobile consomme directement `plan_id` (surlignage du plan actuel dans
+l'écran Plans, fallback `plan_nom` si `plan_id` est null).
+
 ## Récapitulatif
 | Pré-requis | État backend | Action requise |
 |---|---|---|
