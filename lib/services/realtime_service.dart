@@ -1,5 +1,20 @@
 // lib/services/realtime_service.dart
 // Supabase Realtime — abonnement aux nouvelles commandes + statut tenant
+//
+// M7 — NOTE ARCHITECTURE : coexistence assumée avec notification_service.dart.
+// Les deux services écoutent les MÊMES tables Postgres (commandes, tenants)
+// mais via des CHANNELS distincts et pour des usages disjoints :
+//   - RealtimeService  (channels `commandes_realtime_$id`, `tenant_statut_$id`)
+//     → alimente les providers (CommandesProvider refresh, badge nouvelles
+//       commandes, resynchronisation du statut tenant dans AuthService).
+//   - NotificationService (channels `notif_tenant_$id`, `notif_commandes_$id`)
+//     → déclenche uniquement les notifications locales (toasts/bandeaux
+//       in-app) sans toucher à l'état des providers.
+// Fusionner les deux imposerait un couplage providers ↔ notifications locales
+// (cycle de vie différent : NotificationService survit aux changements
+// d'écran, RealtimeService est reset au logout). Coût : 4 souscriptions pour
+// 2 tables — accepté et volontaire. Toute modification doit garder les noms
+// de channels UNIQUES pour éviter qu'un unsubscribe de l'un ne coupe l'autre.
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/commande_model.dart';

@@ -1,6 +1,13 @@
 // lib/services/notification_service.dart
 // Notifications in-app + locales avec son pour commandes et paiements
 // FIX: initialisé au démarrage dans main.dart, canal commandes + canal paiement
+//
+// M7 — NOTE ARCHITECTURE : ce service écoute les mêmes tables (commandes,
+// tenants) que realtime_service.dart mais via des channels distincts
+// (`notif_tenant_$id`, `notif_commandes_$id`) et pour un usage disjoint :
+// notifications locales uniquement, jamais de mutation des providers.
+// Voir le commentaire détaillé en tête de realtime_service.dart —
+// redondance assumée, ne pas fusionner sans revoir les cycles de vie.
 import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
