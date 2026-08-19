@@ -53,9 +53,27 @@ web n'est requise** : tous les contrats listés existent déjà à HEAD `98223df
   (`src/routes/api-commandes.ts` l.138, 589). Le mobile envoie désormais le header
   sur toutes les requêtes authentifiées (inoffensif sur les routes qui l'ignorent).
 
+## 9. Purge R2 des photos produits (M2 — correction web recommandée)
+**Constat (HEAD 98223df)** : `PATCH /dashboard/produits/:id` (`src/routes/api-dashboard.ts`
+l.804-840) met à jour `photo_url`/`photo_r2_key` **sans purger l'ancien objet R2**,
+contrairement à `PATCH /dashboard/supplements/:id` (l.1042) qui lit `photo_r2_key`
+avant l'UPDATE et supprime l'ancien fichier.
+
+**Côté mobile (déjà fait, M2)** : l'upload d'une nouvelle photo produit passe par
+`POST /dashboard/upload-image` avec `ancienne_cle` extraite de `photo_url`
+(`GET /dashboard/menu` ne renvoie pas `photo_r2_key`) → la purge est effectuée
+au moment de l'upload. La clé n'est PAS envoyée si l'URL est suspecte
+(absence du marqueur `/dashboard/media/`, clé vide ou contenant `..`).
+
+**Correction web recommandée** : répliquer dans `PATCH /produits/:id` le pattern
+de `PATCH /supplements/:id` l.1042 (lire `photo_r2_key` avant UPDATE, purger R2
+si la photo change) pour couvrir aussi les mises à jour effectuées depuis le
+dashboard web.
+
 ## Récapitulatif
 | Pré-requis | État backend | Action requise |
 |---|---|---|
 | Template email OTP 8 chiffres | À vérifier dans Supabase Dashboard | ✅ Vérifier `{{ .Token }}` |
 | Toutes les routes API listées | Présentes à HEAD 98223df | Aucune |
 | CSRF exemption Bearer | En place (api-supplements.ts) | Aucune |
+| Purge R2 photos produits (PATCH produits/:id) | Absente à HEAD 98223df | Copier pattern supplements l.1042 |

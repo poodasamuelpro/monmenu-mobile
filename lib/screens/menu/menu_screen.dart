@@ -651,9 +651,25 @@ class _ProduitDialogState extends State<_ProduitDialog> {
     }
   }
 
+  // M2 — Extraction de la clé R2 depuis l'URL photo du produit.
+  // GET /dashboard/menu ne renvoie PAS photo_r2_key : la clé est extraite de
+  // photo_url (`\${origin}/api/v1/dashboard/media/<cle>`). Ne retourne rien si
+  // l'URL est suspecte (pas de marqueur, clé vide ou traversal '..') afin de
+  // ne jamais envoyer une ancienne_cle invalide au serveur.
+  String? _extraireCleR2(String? url) {
+    if (url == null || url.isEmpty) return null;
+    const marqueur = '/dashboard/media/';
+    final idx = url.indexOf(marqueur);
+    if (idx == -1) return null;
+    final cle = Uri.decodeComponent(url.substring(idx + marqueur.length));
+    if (cle.isEmpty || cle.contains('..')) return null;
+    return cle;
+  }
+
   // ── Comprimer et uploader l'image ─────────────────────────────────────────
   // Route : POST /api/v1/dashboard/upload-image
   // Champ multipart : 'file'
+  // Param : 'ancienne_cle' (M2) → purge R2 de l'ancienne image côté serveur
   // Réponse : { success, url, key }
   Future<String?> _uploadImage(XFile imageFile) async {
     try {
@@ -678,8 +694,11 @@ class _ProduitDialogState extends State<_ProduitDialog> {
 
       final filePath = result?.path ?? imageFile.path;
 
+      // M2 — ancienne_cle : purge R2 de l'ancienne photo du produit remplacée
+      final ancienneCle = _extraireCleR2(_photoUrl);
+
       // Upload via API
-      final resp = await api.uploadImage(filePath);
+      final resp = await api.uploadImage(filePath, ancienneCle: ancienneCle);
 
       if (!mounted) return null;
       setState(() => _isUploadingImage = false);
