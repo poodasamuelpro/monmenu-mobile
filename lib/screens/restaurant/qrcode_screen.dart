@@ -1,8 +1,11 @@
 // lib/screens/restaurant/qrcode_screen.dart
 // QR Code restaurant — affichage, partage, instructions client
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
+import 'package:http/http.dart' as http;
+import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -54,6 +57,11 @@ class _QrCodeScreenState extends State<QrCodeScreen> {
 
     if (resp.success) {
       final data = resp.data ?? {};
+      // [CORR-1] — Capturer les URLs de téléchargement haute définition
+      // exposées par GET /dashboard/qrcode (api-dashboard.ts l.2085-2111) :
+      // qr_download_png (PNG 1000x1000) et qr_download_svg.
+      final pngUrl = data['qr_download_png'] as String?;
+      final svgUrl = data['qr_download_svg'] as String?;
       setState(() {
         _qrData = data['qr_url'] as String? ??
             data['boutique_url'] as String? ??
@@ -61,6 +69,10 @@ class _QrCodeScreenState extends State<QrCodeScreen> {
             _qrData;
         _boutiqueUrl = data['boutique_url'] as String? ?? _qrData;
         _nomRestaurant = data['nom'] as String? ?? _nomRestaurant ?? 'Mon Restaurant';
+        // L'une ou l'autre URL de téléchargement peut être absente selon
+        // la configuration du serveur : on garde le meilleur disponible.
+        _qrDownloadPng = (pngUrl != null && pngUrl.isNotEmpty) ? pngUrl : null;
+        _qrDownloadSvg = (svgUrl != null && svgUrl.isNotEmpty) ? svgUrl : null;
         _isLoading = false;
       });
     } else {
@@ -101,6 +113,57 @@ class _QrCodeScreenState extends State<QrCodeScreen> {
       backgroundColor: AppColors.success,
       duration: Duration(seconds: 2),
     ));
+  }
+
+  String? _qrDownloadPng;
+  String? _qrDownloadSvg;
+
+  /// [CORR-1] Téléchargement du QR en fichier (parité web dashboard.js).
+  /// Le serveur expose qr_download_png (PNG HD 1000x1000) et qr_download_svg ;
+  /// avant cette correction, l'écran ne proposait que copier/partager.
+  Future<void> _downloadQrFile() async {
+    final url = _qrDownloadPng ?? _qrDownloadSvg;
+    if (url == null) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Lien de téléchargement indisponible.'),
+        backgroundColor: AppColors.error,
+      ));
+      return;
+    }
+    try {
+      final client = http.Client();
+      try {
+        final resp = await client.get(Uri.parse(url));
+        if (!mounted) return;
+        if (resp.statusCode != 200) {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text('Échec du téléchargement (${resp.statusCode}).'),
+            backgroundColor: AppColors.error,
+          ));
+          return;
+        }
+        final dir = await getApplicationDocumentsDirectory();
+        final slug = auth.tenant?.slug ?? DateTime.now().millisecondsSinceEpoch;
+        final ext = url.contains('format=svg') ? 'svg' : 'png';
+        final file = File('${dir.path}/qrcode-$slug.$ext');
+        await file.writeAsBytes(resp.bodyBytes);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text('QR Code enregistré (${file.path})'),
+            backgroundColor: AppColors.success,
+          ));
+        }
+      } finally {
+        client.close();
+      }
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Échec du téléchargement. Réessayez.'),
+        backgroundColor: AppColors.error,
+      ));
+    }
   }
 
   Future<void> _shareUrl() async {
@@ -285,6 +348,44 @@ class _QrCodeScreenState extends State<QrCodeScreen> {
             ),
           ),
         ]),
+
+        const SizedBox(height: 10),
+
+        // [CORR-1] — Téléchargement du QR en fichier (PNG HD 1000x1000 ou SVG),
+        // parité avec les boutons "PNG HD" / "SVG" du site web.
+        SizedBox(
+          width: double.infinity,
+          child: FilledButton.icon(
+            onPressed: _qrDownloadPng == null && _qrDownloadSvg == null
+                ? null
+                : _downloadQrFile,
+            icon: const Icon(Icons.download_rounded, size: 18),
+            label: const Text('Télécharger le QR Code'),
+            style: FilledButton.styleFrom(
+              padding: const EdgeInsets.symmetric(vertical: 14),
+              backgroundColor: AppColors.success,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            ),
+          ),
+        ),
+        if (_qrDownloadPng == null && _qrDownloadSvg == null) ...[
+          const SizedBox(height: 6),
+          TextButton(
+            onPressed: () async {
+              if (_boutiqueUrl != null) {
+                final url = Uri.parse('https://api.qrserver.com/v1/create-qr-code/?size=1000x1000&data=${Uri.encodeComponent(_boutiqueUrl!)}&format=png');
+                if (await canLaunchUrl(url)) {
+                  await launchUrl(url, mode: LaunchMode.externalApplication);
+                } else {
+                  await _copyUrl();
+                }
+              }
+            },
+            child: const Text('Télécharger via le navigateur (fallback)',
+                style: TextStyle(fontSize: 12)),
+          ),
+        ],
 
         const SizedBox(height: 32),
 

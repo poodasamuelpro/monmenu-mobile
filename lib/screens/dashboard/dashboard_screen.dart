@@ -54,6 +54,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(
+        leading: IconButton(
+          icon: const Icon(Icons.menu_rounded),
+          onPressed: () => Scaffold.maybeOf(context)?.openDrawer(),
+          tooltip: 'Menu',
+        ),
         title: const Text('Tableau de bord'),
         actions: [
           // Indicateur Realtime

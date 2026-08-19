@@ -62,6 +62,11 @@ class _PlansScreenState extends State<PlansScreen> {
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(
+        leading: IconButton(
+          icon: const Icon(Icons.menu_rounded),
+          onPressed: () => Scaffold.maybeOf(context)?.openDrawer(),
+          tooltip: 'Menu',
+        ),
         title: const Text('Plans & Paiement'),
         actions: [
           IconButton(
@@ -267,13 +272,42 @@ class _CurrentSubscriptionCard extends StatelessWidget {
     );
   }
 
+  // [CORR-3] — Durée de l'essai gratuite, cohérente avec le web
+  // (src/lib/constants.ts l.90 : ESSAI_DUREE_JOURS = 14).
+  static const int _essaiDureeJours = 14;
+
+  /// Fallback : si la colonne essai_expire_le est vide en base, calculer
+  /// depuis created_at + durée de l'essai — l'écran affichera quand même
+  /// un nombre de jours au lieu de rester muet.
+  int _joursEssaiFallback(dynamic tenant) {
+    final createdAt = tenant.createdAt as DateTime?;
+    if (createdAt == null) return 0;
+    final expireLe = createdAt.add(const Duration(days: _essaiDureeJours));
+    final diff = expireLe.difference(DateTime.now()).inDays;
+    return diff < 0 ? 0 : diff;
+  }
+
   String _getStatutDescription(dynamic tenant, DashboardProvider dashboard) {
     switch (tenant.statut as String) {
       case 'essai':
-        final jours = dashboard.joursEssaiRestants ?? tenant.joursEssaiRestants;
-        return jours != null
+        final jours = dashboard.joursEssaiRestants ??
+            tenant.joursEssaiRestants ??
+            _joursEssaiFallback(tenant);
+        return jours > 0
             ? '$jours jour${jours > 1 ? 's' : ''} restant${jours > 1 ? 's' : ''} d\'essai'
-            : 'Période d\'essai gratuite';
+            : (dashboard.joursEssaiRestants ?? tenant.joursEssaiRestants) == null
+                ? 'Période d\'essai gratuite — la date de fin n\'est pas renseignée'
+                : 'Période d\'essai expirée — soumettez votre paiement';
+      case 'en_attente_paiement_initial':
+        // [CORR-3] — Statut web retourné après inscription avec plan payant
+        // avant la première preuve de paiement : l'essai court toujours.
+        final jours = dashboard.joursEssaiRestants ??
+            tenant.joursEssaiRestants ??
+            _joursEssaiFallback(tenant);
+        return jours > 0
+            ? '$jours jour${jours > 1 ? 's' : ''} restant${jours > 1 ? 's' : ''} d\'essai — '
+                'soumettez votre preuve de paiement'
+            : 'Soumettez votre preuve de paiement pour activer votre plan';
       case 'actif':
         // M5 — date_fin serveur affichée si disponible
         final fin = dashboard.dateFin;

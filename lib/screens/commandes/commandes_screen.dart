@@ -53,6 +53,11 @@ class _CommandesScreenState extends State<CommandesScreen> {
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(
+        leading: IconButton(
+          icon: const Icon(Icons.menu_rounded),
+          onPressed: () => Scaffold.maybeOf(context)?.openDrawer(),
+          tooltip: 'Menu',
+        ),
         title: Row(
           children: [
             const Text('Commandes'),
