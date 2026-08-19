@@ -19,7 +19,6 @@
 //   - L'access_token temporaire n'est conservé qu'en mémoire (variable d'état)
 //   - Message d'erreur générique pour les codes invalides/expirés
 //   - Bouton "Renvoyer" désactivé 60s pour limiter le spam (rate-limit backend : 5/hr)
-import '../../widgets/nav_buttons.dart';
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -239,36 +238,15 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
       appBar: AppBar(
         backgroundColor: AppColors.background,
         elevation: 0,
-        leadingWidth: 104,
-        leading: SizedBox(
-          width: 104,
-          child: Row(mainAxisSize: MainAxisSize.min, children: [
-            // Hamburger — cet écran n'a pas de drawer ; il ramène à la connexion.
-            IconButton(
-              icon: const Icon(Icons.menu_rounded, color: AppColors.gray700),
-              tooltip: 'Menu',
-              onPressed: () {
-                if (_step > 1) {
-                  // Revenir à l'étape 1 si on est en plein parcours.
-                  setState(() { _step = 1; _error = null; });
-                } else {
-                  context.go('/dashboard/commandes');
-                }
-              },
-            ),
-            // Retour — étape précédente ou page de connexion.
-            IconButton(
-              icon: const Icon(Icons.arrow_back_rounded, color: AppColors.gray700),
-              tooltip: 'Retour',
-              onPressed: () {
-                if (_step > 1) {
-                  setState(() { _step--; _error = null; });
-                } else {
-                  context.go('/login');
-                }
-              },
-            ),
-          ]),
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_rounded, color: AppColors.gray700),
+          onPressed: () {
+            if (_step > 1) {
+              setState(() { _step--; _error = null; });
+            } else {
+              context.go('/login');
+            }
+          },
         ),
       ),
       body: SafeArea(
