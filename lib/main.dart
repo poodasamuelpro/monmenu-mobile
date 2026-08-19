@@ -5,7 +5,6 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
-import 'package:hive_flutter/hive_flutter.dart';
 import 'package:provider/provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -70,8 +69,10 @@ void main() async {
     ),
   );
 
-  // ── Hive (cache local) ─────────────────────────────────────────────────────
-  await Hive.initFlutter();
+  // [P10] Hive retiré : déclaré mais jamais lu/écrit dans lib/ (cache 100%
+  // mémoire via providers). Le retrait du code mort évite d'annoncer une
+  // persistance inexistante. Si une stratégie de cache disque est décidée,
+  // réintroduire hive_flutter + boxes (cf. audit-avant.md B.14).
 
   runApp(const MonMenuApp());
 }

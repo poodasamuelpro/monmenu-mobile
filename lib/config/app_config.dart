@@ -46,10 +46,9 @@ class AppConfig {
   static const String keyTenantData = 'mm_tenant_data';
   static const String keyUserEmail = 'mm_user_email';
 
-  // ── Hive boxes ────────────────────────────────────────────────────────────
-  static const String hiveBoxCommandes = 'commandes_cache';
-  static const String hiveBoxMenu = 'menu_cache';
-  static const String hiveBoxStats = 'stats_cache';
+  // [P10] Constantes Hive retirées (hiveBoxCommandes/Menu/Stats) : aucune
+  // lecture/écriture Hive dans lib/ — code mort qui annonçait une
+  // persistance inexistante (cf. audit-avant.md B.14).
 
   // ── FCM — Firebase Cloud Messaging ────────────────────────────────────────
   // Endpoint pour enregistrer/supprimer le token FCM du device
