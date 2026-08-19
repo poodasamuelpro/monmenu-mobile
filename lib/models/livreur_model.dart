@@ -1,6 +1,8 @@
 // lib/models/livreur_model.dart
 // Livreur — Synchronisé avec l'API /dashboard/livreurs
 // Champs API : id, nom, whatsapp_number, actif, created_at
+import 'dart:convert';
+
 class LivreurModel {
   final String id;
   final String tenantId;
@@ -201,7 +203,7 @@ class PointDeVenteModel {
       tarifLivraisonBase: CodePromoModel._toDoubleNullable(json['tarif_livraison_base']),
       tarifParKm: CodePromoModel._toDoubleNullable(json['tarif_par_km']),
       actif: json['actif'] as bool? ?? true,
-      horaires: json['horaires'] as Map<String, dynamic>?,
+      horaires: _parseHoraires(json['horaires']),
       createdAt: json['created_at'] != null
           ? DateTime.tryParse(json['created_at'] as String)
           : null,
@@ -221,4 +223,26 @@ class PointDeVenteModel {
     'actif': actif,
     'horaires': horaires,
   };
+}
+
+/// FIX — parsing robuste des horaires d'un PDV.
+/// Supabase renvoie la colonne jsonb soit en objet, soit en chaîne JSON.
+/// Le cast direct `as Map<String, dynamic>?` faisait planter l'écran
+/// Restaurant (TypeCastException après le succès de la réponse, sans
+/// try/catch → spinner infini).
+Map<String, dynamic>? _parseHoraires(dynamic value) {
+  if (value == null) return null;
+  if (value is Map<String, dynamic>) return value;
+  if (value is Map) {
+    return value.map((k, v) => MapEntry(k.toString(), v));
+  }
+  if (value is String) {
+    try {
+      final decoded = jsonDecode(value);
+      return decoded is Map ? decoded.map((k, v) => MapEntry(k.toString(), v)) : null;
+    } catch (_) {
+      return null;
+    }
+  }
+  return null;
 }

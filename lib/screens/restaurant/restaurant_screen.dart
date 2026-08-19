@@ -72,20 +72,32 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
     if (!mounted) return;
 
     if (resp.success) {
-      // API retourne: { pdv: {...} | null } — objet unique, PAS une liste
-      final pdvData = resp.data?['pdv'] as Map<String, dynamic>?;
-      if (pdvData != null) {
-        final pdv = PointDeVenteModel.fromJson(pdvData);
-        _fillForm(pdv);
-        setState(() { _isLoading = false; });
-      } else {
-        // M3 — Aucun PDV encore créé : formulaire affiché quand même,
-        // pré-rempli avec le nom du tenant. Le web INSÈRE le PDV au premier
-        // PATCH /dashboard/pdv, donc _save fonctionne sans PDV existant.
-        if (_nomCtrl.text.trim().isEmpty) {
-          _nomCtrl.text = auth.tenant?.nom ?? '';
+      // FIX — parsing protégé : une donnée inattendue affiche une erreur
+      // claire au lieu de figer l'écran sur le chargement (le spinner
+      // restait éternel car l'exception sortait avant _isLoading=false).
+      try {
+        // API retourne: { pdv: {...} | null } — objet unique, PAS une liste
+        final pdvData = resp.data?['pdv'] as Map<String, dynamic>?;
+        if (pdvData != null) {
+          final pdv = PointDeVenteModel.fromJson(pdvData);
+          _fillForm(pdv);
+        } else {
+          // M3 — Aucun PDV encore créé : formulaire affiché quand même,
+          // pré-rempli avec le nom du tenant. Le web INSÈRE le PDV au premier
+          // PATCH /dashboard/pdv, donc _save fonctionne sans PDV existant.
+          if (_nomCtrl.text.trim().isEmpty) {
+            _nomCtrl.text = auth.tenant?.nom ?? '';
+          }
         }
-        setState(() { _isLoading = false; });
+        if (mounted) setState(() { _isLoading = false; });
+      } catch (e) {
+        if (mounted) {
+          setState(() {
+            _error = 'Les données du restaurant sont illisibles ($e). '
+                'Vérifiez la connexion et réessayez.';
+            _isLoading = false;
+          });
+        }
       }
     } else if (resp.isUnauthorized) {
       // M3 — 401 : PAS de cascade (l'éventuel refresh/logout est géré
