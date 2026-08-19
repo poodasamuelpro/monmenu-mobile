@@ -71,15 +71,20 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
     setState(() => _isSubmitting = false);
 
     if (resp.success) {
+      // [P7] Le web révoque TOUTES les sessions après un changement de mot de
+      // passe (api-dashboard.ts change-password). Sans déconnexion propre, le
+      // prochain appel API échouerait en 401 générique. On annonce donc la
+      // reconnexion et on déclenche un logout local immédiat.
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            resp.data?['message'] as String? ?? 'Mot de passe modifié avec succès.',
-          ),
+        const SnackBar(
+          content: Text('Mot de passe modifié. Veuillez vous reconnecter.'),
           backgroundColor: AppColors.success,
+          duration: Duration(seconds: 4),
         ),
       );
-      context.pop();
+      await auth.logout();
+      if (!mounted) return;
+      context.go('/login');
     } else {
       // 401 = mot de passe actuel incorrect
       // 422 = règle de format non respectée
