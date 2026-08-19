@@ -24,6 +24,7 @@ dependencies:
 
   # HTTP
   http: 1.5.0
+  http_parser: ^4.0.2
 
   # Stockage local (cache)
   hive: 2.2.3

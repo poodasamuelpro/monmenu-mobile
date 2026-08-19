@@ -7,7 +7,6 @@
 //   PATCH /dashboard/apparence     : { couleur_primaire?, logo_url?, banniere_url? }
 //         (couleurs #RRGGBB — l.1374-1415)
 import 'package:flutter/material.dart';
-import 'package:go_router/go_router.dart';
 import 'package:flutter_image_compress/flutter_image_compress.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:path_provider/path_provider.dart';
@@ -17,6 +16,7 @@ import '../../services/auth_service.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/loading_widget.dart';
 import '../../widgets/app_drawer.dart';
+import '../../widgets/nav_buttons.dart';
 
 class ApparenceScreen extends StatefulWidget {
   const ApparenceScreen({super.key});
@@ -244,7 +244,7 @@ class _ApparenceScreenState extends State<ApparenceScreen> {
         minWidth: estLogo ? 800 : 1600,
         minHeight: estLogo ? 800 : 1600,
         quality: quality,
-        format: ext == 'png' ? CompressFormat.png : CompressFormat.jpg,
+        format: ext == 'png' ? CompressFormat.png : CompressFormat.jpeg,
       );
       if (compressed != null) filePath = compressed.path;
     } catch (_) {

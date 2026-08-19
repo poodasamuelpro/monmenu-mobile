@@ -1,7 +1,6 @@
 // lib/screens/restaurant/restaurant_screen.dart
 // Mon Restaurant — édition Point de Vente: nom, adresse, horaires, tarifs livraison
 import 'package:flutter/material.dart';
-import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import '../../models/livreur_model.dart';
 import '../../services/api_service.dart';
@@ -9,6 +8,7 @@ import '../../services/auth_service.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/loading_widget.dart';
 import '../../widgets/app_drawer.dart';
+import '../../widgets/nav_buttons.dart';
 
 class RestaurantScreen extends StatefulWidget {
   const RestaurantScreen({super.key});

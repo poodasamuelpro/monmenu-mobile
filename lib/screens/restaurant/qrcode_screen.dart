@@ -3,7 +3,6 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:go_router/go_router.dart';
 import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
@@ -14,6 +13,7 @@ import '../../services/auth_service.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/loading_widget.dart';
 import '../../widgets/app_drawer.dart';
+import '../../widgets/nav_buttons.dart';
 
 class QrCodeScreen extends StatefulWidget {
   const QrCodeScreen({super.key});
@@ -122,6 +122,7 @@ class _QrCodeScreenState extends State<QrCodeScreen> {
   /// Le serveur expose qr_download_png (PNG HD 1000x1000) et qr_download_svg ;
   /// avant cette correction, l'écran ne proposait que copier/partager.
   Future<void> _downloadQrFile() async {
+    final auth = context.read<AuthService>();
     final url = _qrDownloadPng ?? _qrDownloadSvg;
     if (url == null) {
       if (!mounted) return;

@@ -16,6 +16,7 @@ import 'package:provider/provider.dart';
 import '../../services/api_service.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/app_drawer.dart';
+import '../../widgets/nav_buttons.dart';
 
 /// Modèle local pour une notification restaurant
 class _NotifItem {

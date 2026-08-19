@@ -12,12 +12,11 @@
 // Le mobile ne gère PAS la confirmation finale (lien email uniquement) :
 // il informe l'utilisateur qu'un email a été envoyé.
 import 'package:flutter/material.dart';
-import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import '../../services/api_service.dart';
-import '../../widgets/app_drawer.dart';
 import '../../widgets/nav_buttons.dart';
+import '../../theme/app_theme.dart';
 
 class CompteScreen extends StatefulWidget {
   const CompteScreen({super.key});

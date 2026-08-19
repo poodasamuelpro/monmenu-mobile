@@ -10,6 +10,7 @@ import '../../theme/app_theme.dart';
 import '../../widgets/app_drawer.dart';
 import '../../widgets/payment_alert_banner.dart';
 import '../../widgets/statut_badge.dart';
+import '../../widgets/nav_buttons.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});

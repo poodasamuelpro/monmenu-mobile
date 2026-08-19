@@ -1,13 +1,13 @@
 // lib/screens/restaurant/codes_promo_screen.dart
 // Codes promotionnels — liste, création, toggle actif, suppression
 import 'package:flutter/material.dart';
-import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import '../../models/livreur_model.dart';
 import '../../services/api_service.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/loading_widget.dart';
 import '../../widgets/app_drawer.dart';
+import '../../widgets/nav_buttons.dart';
 
 class CodesPromoScreen extends StatefulWidget {
   const CodesPromoScreen({super.key});

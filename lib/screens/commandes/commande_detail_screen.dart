@@ -7,7 +7,6 @@
 //   - Le lien livreur est retourné dans la réponse JSON → app ouvre WhatsApp directement
 //   - Notification CLIENT via wa.me/ avec message pré-rempli au changement de statut
 import 'package:flutter/material.dart';
-import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../models/commande_model.dart';

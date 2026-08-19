@@ -2,7 +2,6 @@
 // Gestion complète des livreurs — liste, ajout, édition, toggle actif
 // SYNC API : POST/PATCH /dashboard/livreurs → champs: nom, whatsapp_number, actif
 import 'package:flutter/material.dart';
-import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../models/livreur_model.dart';
@@ -10,6 +9,7 @@ import '../../services/api_service.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/loading_widget.dart';
 import '../../widgets/app_drawer.dart';
+import '../../widgets/nav_buttons.dart';
 
 class LivreursScreen extends StatefulWidget {
   const LivreursScreen({super.key});

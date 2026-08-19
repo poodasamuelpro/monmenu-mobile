@@ -1,6 +1,5 @@
 // lib/screens/stats/stats_screen.dart
 import 'package:flutter/material.dart';
-import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import 'package:fl_chart/fl_chart.dart';
 import '../../models/plan_model.dart';
@@ -10,6 +9,7 @@ import '../../theme/app_theme.dart';
 import '../../widgets/app_drawer.dart';
 import '../../widgets/payment_alert_banner.dart';
 import '../../widgets/loading_widget.dart' as lw;
+import '../../widgets/nav_buttons.dart';
 
 class StatsScreen extends StatefulWidget {
   const StatsScreen({super.key});
