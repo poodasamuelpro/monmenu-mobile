@@ -18,12 +18,26 @@ class ApiService {
   // ── Headers communs avec Bearer token ─────────────────────────────────────
   Map<String, String> get _headers {
     final token = _authService.accessToken;
+    // [P8] Contrat slug : le backend lit X-Tenant-Slug en priorité
+    // (api-commandes.ts : c.req.header('X-Tenant-Slug') || body.slug) et
+    // ignore tout tenant_id client. Header omis si le tenant n'est pas
+    // encore chargé (login, reset MDP) — jamais de valeur vide.
+    final slug = _authService.tenant?.slug;
     return {
       'Content-Type': 'application/json',
       'Accept': 'application/json',
       if (token != null && token.length >= AppConfig.tokenMinLength)
         'Authorization': 'Bearer $token',
+      if (slug != null && slug.isNotEmpty) 'X-Tenant-Slug': slug,
     };
+  }
+
+  // [P8] Ajoute X-Tenant-Slug aux requêtes multipart (même contrat que _headers)
+  void _ajouterSlugHeader(http.BaseRequest request) {
+    final slug = _authService.tenant?.slug;
+    if (slug != null && slug.isNotEmpty) {
+      request.headers['X-Tenant-Slug'] = slug;
+    }
   }
 
   // ── GET ────────────────────────────────────────────────────────────────────
@@ -323,6 +337,7 @@ class ApiService {
       // SEC-02 : Authorization header, jamais loggé
       request.headers['Authorization'] = 'Bearer $token';
       request.headers['Accept'] = 'application/json';
+      _ajouterSlugHeader(request); // [P8]
 
       // Champs texte
       request.fields['plan_id'] = planId;
@@ -387,6 +402,7 @@ class ApiService {
 
       request.headers['Authorization'] = 'Bearer $token';
       request.headers['Accept'] = 'application/json';
+      _ajouterSlugHeader(request); // [P8]
 
       // P4 — purge R2 de l'ancienne image lors du remplacement (parité web)
       if (ancienneCle != null && ancienneCle.isNotEmpty) {
@@ -472,6 +488,7 @@ class ApiService {
       final request = http.MultipartRequest('POST', uri);
       request.headers['Authorization'] = 'Bearer $token';
       request.headers['Accept'] = 'application/json';
+      _ajouterSlugHeader(request); // [P8]
 
       final file = File(filePath);
       if (!file.existsSync()) {
