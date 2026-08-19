@@ -145,6 +145,16 @@ class AppDrawer extends StatelessWidget {
                     route: '/dashboard/plans',
                     currentRoute: route,
                     badge: showPaymentBadge,
+                    // P9 — exact : éviter le double surlignage avec
+                    // 'Historique paiements' (/dashboard/plans/historique)
+                    exact: true,
+                  ),
+                  // P9 — parité sidebar web : Historique paiements après Plans
+                  _NavItem(
+                    icon: Icons.history_rounded,
+                    label: 'Historique paiements',
+                    route: '/dashboard/plans/historique',
+                    currentRoute: route,
                   ),
                   _NavItem(
                     icon: Icons.notifications_rounded,
@@ -222,6 +232,7 @@ class _NavItem extends StatelessWidget {
   final String route;
   final String currentRoute;
   final bool badge;
+  final bool exact;
 
   const _NavItem({
     required this.icon,
@@ -229,11 +240,13 @@ class _NavItem extends StatelessWidget {
     required this.route,
     required this.currentRoute,
     this.badge = false,
+    this.exact = false,
   });
 
   @override
   Widget build(BuildContext context) {
-    final isActive = currentRoute.startsWith(route);
+    final isActive =
+        exact ? currentRoute == route : currentRoute.startsWith(route);
 
     return Container(
       margin: const EdgeInsets.only(bottom: 2),

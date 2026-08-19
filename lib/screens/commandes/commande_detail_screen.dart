@@ -15,6 +15,7 @@ import '../../models/livreur_model.dart';
 import '../../providers/commandes_provider.dart';
 import '../../services/api_service.dart';
 import '../../theme/app_theme.dart';
+import '../../widgets/app_drawer.dart';
 import '../../widgets/statut_badge.dart';
 
 class CommandeDetailScreen extends StatefulWidget {
@@ -316,7 +317,18 @@ class _CommandeDetailScreenState extends State<CommandeDetailScreen> {
           icon: const Icon(Icons.arrow_back_rounded),
           onPressed: () => context.pop(),
         ),
+        actions: [
+          // P9 — accès menu même en navigation profonde
+          Builder(
+            builder: (ctx) => IconButton(
+              icon: const Icon(Icons.menu_rounded),
+              tooltip: 'Menu',
+              onPressed: () => Scaffold.of(ctx).openDrawer(),
+            ),
+          ),
+        ],
       ),
+      drawer: const AppDrawer(),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator(color: AppColors.primary))
           : _error != null

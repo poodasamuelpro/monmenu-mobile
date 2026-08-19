@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 import '../../models/plan_model.dart';
 import '../../services/api_service.dart';
 import '../../theme/app_theme.dart';
+import '../../widgets/app_drawer.dart';
 import '../../widgets/loading_widget.dart' as lw;
 
 class AbonnementHistoriqueScreen extends StatefulWidget {
@@ -105,7 +106,18 @@ class _AbonnementHistoriqueScreenState
           onPressed: () => context.canPop() ? context.pop() : context.go('/dashboard/plans'),
           tooltip: 'Retour',
         ),
+        actions: [
+          // P9 — accès menu même en navigation profonde
+          Builder(
+            builder: (ctx) => IconButton(
+              icon: const Icon(Icons.menu_rounded),
+              tooltip: 'Menu',
+              onPressed: () => Scaffold.of(ctx).openDrawer(),
+            ),
+          ),
+        ],
       ),
+      drawer: const AppDrawer(),
       body: RefreshIndicator(
         color: AppColors.primary,
         onRefresh: _refresh,
