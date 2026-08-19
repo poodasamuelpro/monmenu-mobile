@@ -60,6 +60,60 @@ class _NotifItem {
       );
 }
 
+/// [P6] Notification paiement synthétique — contrat web GET /paiement/notifications :
+/// { notifications[{id,type,titre,message,action?{label,href},created_at}], count, non_lues }
+class _PaiementNotifItem {
+  final String id;
+  final String type; // 'info' | 'warning' | 'error'
+  final String titre;
+  final String message;
+  final String? actionLabel;
+  final String? actionHref;
+  final DateTime createdAt;
+
+  const _PaiementNotifItem({
+    required this.id,
+    required this.type,
+    required this.titre,
+    required this.message,
+    this.actionLabel,
+    this.actionHref,
+    required this.createdAt,
+  });
+
+  factory _PaiementNotifItem.fromJson(Map<String, dynamic> j) {
+    final action = j['action'] is Map ? Map<String, dynamic>.from(j['action'] as Map) : null;
+    return _PaiementNotifItem(
+      id: j['id'] as String? ?? '',
+      type: j['type'] as String? ?? 'info',
+      titre: j['titre'] as String? ?? '',
+      message: j['message'] as String? ?? '',
+      actionLabel: action?['label'] as String?,
+      actionHref: action?['href'] as String?,
+      createdAt: j['created_at'] != null
+          ? DateTime.tryParse(j['created_at'] as String) ?? DateTime.now()
+          : DateTime.now(),
+    );
+  }
+}
+
+/// [P6] Alias des routes web → routes mobiles équivalentes.
+/// Le web écrit des liens de notifications avec SES chemins de pages ;
+/// on les traduit avant le passage par la whitelist mobile.
+String mapLienWebVersMobile(String lien) {
+  const aliases = <String, String>{
+    '/dashboard/parametres': '/dashboard/settings',
+    '/dashboard/abonnement': '/dashboard/plans',
+    '/dashboard/home': '/dashboard',
+  };
+  for (final entry in aliases.entries) {
+    if (lien == entry.key || lien.startsWith('${entry.key}/')) {
+      return entry.value + lien.substring(entry.key.length);
+    }
+  }
+  return lien;
+}
+
 class NotificationsScreen extends StatefulWidget {
   const NotificationsScreen({super.key});
 
@@ -82,10 +136,32 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
   // Filtre : uniquement non lues ou toutes
   bool _nonLuesSeulement = false;
 
+  // [P6] Alertes paiement synthétiques (GET /paiement/notifications)
+  List<_PaiementNotifItem> _paiementItems = [];
+
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) => _loadPage(reset: true));
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _loadPage(reset: true);
+      _loadPaiementNotifications();
+    });
+  }
+
+  // ── [P6] Charger les alertes paiement (essai qui expire, paiement en attente) ─
+  Future<void> _loadPaiementNotifications() async {
+    final api = context.read<ApiService>();
+    final resp = await api.getPaiementNotifications();
+    if (!mounted) return;
+    if (resp.success && resp.data != null) {
+      final rawList = resp.data!['notifications'] as List? ?? [];
+      setState(() {
+        _paiementItems = rawList
+            .map((j) => _PaiementNotifItem.fromJson(j as Map<String, dynamic>))
+            .toList();
+      });
+    }
+    // Échec silencieux : la liste principale reste utilisable sans les alertes.
   }
 
   // ── Charger une page de notifications ──────────────────────────────────────
@@ -160,30 +236,38 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
         }
       });
 
-      // Navigation sécurisée via whitelist de routes internes connues
+      // [P6] Navigation : alias web→mobile PUIS whitelist ; fallback dashboard
       if (lien != null && lien.isNotEmpty && mounted) {
-        const routesPermises = [
-          '/dashboard/commandes',
-          '/dashboard/home',
-          '/dashboard/menu',
-          '/dashboard/plans',
-          '/dashboard/restaurant',
-          '/dashboard/stats',
-          '/dashboard/settings',
-          '/dashboard/notifications',
-          '/dashboard/livreurs',
-          '/dashboard/qrcode',
-          '/dashboard/codes-promo',
-          '/dashboard/apparence',
-          '/dashboard/change-password',
-        ];
-        final estInterne = routesPermises.any((r) => lien.startsWith(r));
-        if (estInterne) {
-          context.go(lien);
-        }
-        // Si le lien n'est pas dans la whitelist : ignorer silencieusement (pas de crash)
+        _naviguerVersLien(lien);
       }
     }
+  }
+
+  // ── [P6] Traduction alias web→mobile + whitelist + fallback dashboard ──────
+  void _naviguerVersLien(String lien) {
+    // Liens ancre internes web ('#paiements', '#suppressions') : sans
+    // équivalent mobile → fallback dashboard.
+    final mappe = lien.startsWith('#') ? '/dashboard' : mapLienWebVersMobile(lien);
+    const routesPermises = [
+      '/dashboard/commandes',
+      '/dashboard/home',
+      '/dashboard/menu',
+      '/dashboard/supplements',
+      '/dashboard/plans',
+      '/dashboard/restaurant',
+      '/dashboard/stats',
+      '/dashboard/settings',
+      '/dashboard/notifications',
+      '/dashboard/livreurs',
+      '/dashboard/qrcode',
+      '/dashboard/codes-promo',
+      '/dashboard/apparence',
+      '/dashboard/change-password',
+    ];
+    final estInterne = mappe == '/dashboard' ||
+        routesPermises.any((r) => mappe == r || mappe.startsWith('$r/'));
+    // Lien inconnu : fallback visible vers le dashboard (au lieu d'ignorer).
+    context.go(estInterne ? mappe : '/dashboard');
   }
 
   // ── Marquer toutes les notifications comme lues ────────────────────────────
@@ -423,6 +507,34 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     }
 
     if (_items.isEmpty) {
+      // [P6] Même vide, afficher les alertes paiement si présentes
+      if (_paiementItems.isNotEmpty) {
+        return RefreshIndicator(
+          color: AppColors.primary,
+          onRefresh: () async {
+            await _loadPage(reset: true);
+            await _loadPaiementNotifications();
+          },
+          child: ListView(
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            children: [
+              _buildPaiementSection(),
+              const SizedBox(height: 24),
+              Center(
+                child: Text(
+                  _nonLuesSeulement
+                      ? 'Aucune notification non lue'
+                      : 'Aucune autre notification',
+                  style: const TextStyle(
+                    fontSize: 14,
+                    color: AppColors.gray400,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      }
       return Center(
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -468,20 +580,132 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
       );
     }
 
+    // [P6] Bloc paiement en tête de liste (index 0 si présent)
+    final hasPaiement = _paiementItems.isNotEmpty;
+    final headerCount = hasPaiement ? 1 : 0;
     return RefreshIndicator(
       color: AppColors.primary,
-      onRefresh: () => _loadPage(reset: true),
+      onRefresh: () async {
+        await _loadPage(reset: true);
+        await _loadPaiementNotifications();
+      },
       child: ListView.separated(
         padding: const EdgeInsets.symmetric(vertical: 8),
-        itemCount: _items.length + (_hasMore ? 1 : 0),
+        itemCount: headerCount + _items.length + (_hasMore ? 1 : 0),
         separatorBuilder: (_, __) => const SizedBox(height: 2),
         itemBuilder: (context, index) {
+          if (hasPaiement && index == 0) {
+            return _buildPaiementSection();
+          }
+          final itemIndex = index - headerCount;
           // Bouton "Charger plus" en fin de liste
-          if (index == _items.length) {
+          if (itemIndex == _items.length) {
             return _buildLoadMoreButton();
           }
-          return _buildNotifTile(_items[index]);
+          return _buildNotifTile(_items[itemIndex]);
         },
+      ),
+    );
+  }
+
+  // ── [P6] Section « Paiement » : alertes de GET /paiement/notifications ────
+  Widget _buildPaiementSection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Padding(
+          padding: EdgeInsets.fromLTRB(16, 8, 16, 6),
+          child: Text(
+            'Paiement',
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w700,
+              color: AppColors.gray600,
+              letterSpacing: 0.3,
+            ),
+          ),
+        ),
+        ..._paiementItems.map(_buildPaiementTile),
+        const Padding(
+          padding: EdgeInsets.fromLTRB(16, 10, 16, 6),
+          child: Text(
+            'Autres notifications',
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w700,
+              color: AppColors.gray600,
+              letterSpacing: 0.3,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  // ── [P6] Tuile d'une alerte paiement (avec action → alias + whitelist) ────
+  Widget _buildPaiementTile(_PaiementNotifItem notif) {
+    final color = _colorForType(notif.type);
+    final icon = _iconForType(notif.type);
+
+    return Material(
+      color: color.withValues(alpha: 0.06),
+      child: InkWell(
+        onTap: notif.actionHref != null
+            ? () => _naviguerVersLien(notif.actionHref!)
+            : null,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                width: 38,
+                height: 38,
+                decoration: BoxDecoration(
+                  color: color.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Icon(icon, size: 20, color: color),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      notif.titre,
+                      style: const TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.gray900,
+                      ),
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      notif.message,
+                      style: const TextStyle(
+                        fontSize: 13,
+                        color: AppColors.gray600,
+                        height: 1.35,
+                      ),
+                    ),
+                    if (notif.actionLabel != null) ...[
+                      const SizedBox(height: 6),
+                      Text(
+                        '${notif.actionLabel} →',
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: color,
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
