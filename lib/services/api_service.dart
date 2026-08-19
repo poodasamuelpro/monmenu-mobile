@@ -4,9 +4,26 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
+import 'package:http_parser/http_parser.dart';
 import 'package:http/http.dart' as http;
 import '../config/app_config.dart';
 import '../services/auth_service.dart';
+
+/// Content-Type d'une image selon son extension — utilisé pour les uploads
+/// multipart (sans cela Dart envoie application/octet-stream, rejeté 415
+/// par le web qui vérifie le MIME avant de lire le fichier).
+MediaType _imageContentType(String ext) {
+  switch (ext) {
+    case 'png':
+      return MediaType('image', 'png');
+    case 'webp':
+      return MediaType('image', 'webp');
+    case 'gif':
+      return MediaType('image', 'gif');
+    default:
+      return MediaType('image', 'jpeg');
+  }
+}
 
 class ApiService {
   final AuthService _authService;
@@ -353,11 +370,16 @@ class ApiService {
       }
       final fileBytes = await file.readAsBytes();
       final fileName = file.path.split('/').last;
+      // FIX — Content-Type JPEG pour la preuve de paiement.
+      // Sans contentType, Dart envoie application/octet-stream et le web
+      // rejette en 415 dans 100 % des cas (vérification MIME avant lecture).
       final multipartFile = http.MultipartFile.fromBytes(
         'preuve',
         fileBytes,
         filename: fileName,
+        contentType: MediaType('image', 'jpeg'),
       );
+
       request.files.add(multipartFile);
 
       final streamedResponse = await request.send()
@@ -415,12 +437,15 @@ class ApiService {
       }
 
       final ext = filePath.split('.').last.toLowerCase();
-
       final fileBytes = await file.readAsBytes();
+      // FIX — Content-Type réel de l'image produit.
+      // Sans contentType, Dart envoie application/octet-stream et le web
+      // rejette en 415 dans 100 % des cas (vérification MIME avant lecture).
       final multipartFile = http.MultipartFile.fromBytes(
         'file',
         fileBytes,
         filename: 'image.$ext',
+        contentType: _imageContentType(ext),
       );
       request.files.add(multipartFile);
 
@@ -496,10 +521,14 @@ class ApiService {
       }
       final ext = filePath.split('.').last.toLowerCase();
       final fileBytes = await file.readAsBytes();
+      // FIX — Content-Type réel de l'image supplément.
+      // Sans contentType, Dart envoie application/octet-stream et le web
+      // rejette en 415 dans 100 % des cas (vérification MIME avant lecture).
       request.files.add(http.MultipartFile.fromBytes(
         'file',
         fileBytes,
         filename: 'supplement.$ext',
+        contentType: _imageContentType(ext),
       ));
 
       final streamedResponse =
