@@ -98,6 +98,11 @@ class _PlansScreenState extends State<PlansScreen> {
               if (dashboard.hasAbonnementEnAttente) ...[
                 _EnAttenteCard(
                   abonnement: dashboard.abonnementEnCours,
+                  // M5 — valeurs serveur (GET /paiement/statut)
+                  slaAdminHeures: dashboard.slaAdminHeures,
+                  fenetreAccesHeures: dashboard.fenetreAccesHeures,
+                  planInitialNom: dashboard.planInitialNom,
+                  planInitialPrix: dashboard.planInitialPrix,
                   onUploadPreuve: () => _showUploadSheet(context, null, null),
                 ),
                 const SizedBox(height: 16),
@@ -270,7 +275,13 @@ class _CurrentSubscriptionCard extends StatelessWidget {
             ? '$jours jour${jours > 1 ? 's' : ''} restant${jours > 1 ? 's' : ''} d\'essai'
             : 'Période d\'essai gratuite';
       case 'actif':
-        return 'Abonnement actif ✓';
+        // M5 — date_fin serveur affichée si disponible
+        final fin = dashboard.dateFin;
+        return fin != null
+            ? 'Abonnement actif ✓ — expire le '
+                '${fin.day.toString().padLeft(2, '0')}/'
+                '${fin.month.toString().padLeft(2, '0')}/${fin.year}'
+            : 'Abonnement actif ✓';
       case 'en_attente_confirmation':
         return '⏳ Paiement soumis — confirmation sous 48h';
       case 'inactif':
@@ -286,9 +297,21 @@ class _CurrentSubscriptionCard extends StatelessWidget {
 // ── Bandeau en attente de confirmation ───────────────────────────────────────
 class _EnAttenteCard extends StatelessWidget {
   final Map<String, dynamic>? abonnement;
+  // M5 — champs serveur GET /paiement/statut (fallback web : 48h / 72h)
+  final int? slaAdminHeures;
+  final int? fenetreAccesHeures;
+  final String? planInitialNom;
+  final double? planInitialPrix;
   final VoidCallback onUploadPreuve;
 
-  const _EnAttenteCard({this.abonnement, required this.onUploadPreuve});
+  const _EnAttenteCard({
+    this.abonnement,
+    this.slaAdminHeures,
+    this.fenetreAccesHeures,
+    this.planInitialNom,
+    this.planInitialPrix,
+    required this.onUploadPreuve,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -340,11 +363,20 @@ class _EnAttenteCard extends StatelessWidget {
               style: TextStyle(fontSize: 12, color: Colors.orange.shade800),
             ),
           ],
+          // M5 — plan initial conservé pendant la vérification (serveur)
+          if (planInitialNom != null) ...[
+            const SizedBox(height: 6),
+            Text(
+              'Plan actuel conservé pendant la vérification : $planInitialNom'
+              '${planInitialPrix != null ? ' (${planInitialPrix!.toStringAsFixed(0)} FCFA/mois)' : ''}',
+              style: TextStyle(fontSize: 12, color: Colors.orange.shade800),
+            ),
+          ],
           const SizedBox(height: 10),
-          const Text(
-            'Vous avez 72h pour effectuer le paiement après réception de la référence. '
-            'L\'équipe admin a 48h pour confirmer après soumission de votre preuve.',
-            style: TextStyle(fontSize: 11, color: Colors.orange, height: 1.4),
+          Text(
+            'Vous avez ${fenetreAccesHeures ?? 72}h pour effectuer le paiement après réception de la référence. '
+            'L\'équipe admin a ${slaAdminHeures ?? 48}h pour confirmer après soumission de votre preuve.',
+            style: const TextStyle(fontSize: 11, color: Colors.orange, height: 1.4),
           ),
         ],
       ),

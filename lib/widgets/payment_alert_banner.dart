@@ -10,7 +10,7 @@
 // - en_attente_confirmation, heures >= 10 → info bleue
 // - inactif / suspendu → error rouge
 //
-// SLA annoncé à l'utilisateur : 48h (délai admin affiché)
+// SLA annoncé à l'utilisateur : sla_admin_heures serveur (défaut 48h) — M5
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
@@ -62,20 +62,24 @@ class PaymentAlertBanner extends StatelessWidget {
 
     // ── En attente de confirmation ────────────────────────────────────────
     // Web : heures < 10 → type 'warning', sinon 'info'
-    // SLA annoncé : 48h max
+    // M5 — valeurs SERVEUR en priorité : heures_restantes_confirmation puis
+    // sla_admin_heures (GET /paiement/statut) ; fallback local sinon.
     if (statut == 'en_attente_confirmation') {
       final paiement = tenant.paiementEnAttente;
-      final heures = paiement?.heuresRestantesCalculees ??
+      final heures = dashboard.heuresRestantesServeur ??
+          paiement?.heuresRestantesCalculees ??
           _calcHeures(
             (dashboard.abonnementEnCours?['delai_confirmation_expire_le']) as String?,
           );
+
+      final sla = dashboard.slaAdminHeures ?? 48;
 
       // Web exact : heuresRestantes < 10 → 'warning'
       final isUrgent = heures > 0 && heures < 10;
 
       final message = isUrgent
-          ? 'Confirmation sous 48h max ($heures h restantes avant coupure)'
-          : 'Confirmation sous 48h max — paiement en cours de vérification';
+          ? 'Confirmation sous ${sla}h max ($heures h restantes avant coupure)'
+          : 'Confirmation sous ${sla}h max — paiement en cours de vérification';
 
       return _Banner(
         color: isUrgent ? AppColors.warning : AppColors.secondary,

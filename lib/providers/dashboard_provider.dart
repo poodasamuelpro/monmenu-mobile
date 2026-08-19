@@ -72,6 +72,42 @@ class DashboardProvider extends ChangeNotifier {
   int? get joursEssaiRestants =>
       (_abonnementStatut?['jours_essai_restants'] as num?)?.toInt();
 
+  // ── M5 — champs GET /paiement/statut consommés (api-paiement.ts l.103-174) ──
+
+  /// SLA de confirmation admin en heures (serveur, défaut web = 48).
+  int? get slaAdminHeures =>
+      (_abonnementStatut?['sla_admin_heures'] as num?)?.toInt();
+
+  /// Fenêtre d'accès post-expiration en heures (serveur, défaut web = 72).
+  int? get fenetreAccesHeures =>
+      (_abonnementStatut?['fenetre_acces_heures'] as num?)?.toInt();
+
+  /// Nom du plan initial (avant changement en attente de confirmation).
+  String? get planInitialNom =>
+      _abonnementStatut?['plan_initial_nom'] as String?;
+
+  /// Prix mensuel du plan initial.
+  double? get planInitialPrix {
+    final v = _abonnementStatut?['plan_initial_prix_mensuel'];
+    if (v == null) return null;
+    if (v is num) return v.toDouble();
+    return double.tryParse(v.toString());
+  }
+
+  /// Date de fin de l'abonnement en cours (abonnement.date_fin).
+  DateTime? get dateFin {
+    final raw = abonnementEnCours?['date_fin'] as String?;
+    return raw != null ? DateTime.tryParse(raw) : null;
+  }
+
+  /// Mode d'accès calculé côté serveur (source de vérité).
+  String? get modeAccesServeur => _abonnementStatut?['mode_acces'] as String?;
+
+  /// Heures restantes de confirmation depuis le serveur (prioritaire sur
+  /// tout calcul local — M5).
+  int? get heuresRestantesServeur =>
+      (abonnementEnCours?['heures_restantes_confirmation'] as num?)?.toInt();
+
   // ── Upload state ───────────────────────────────────────────────────────────
   UploadStatut get uploadStatut => _uploadStatut;
   bool get isUploading => _uploadStatut == UploadStatut.loading;
