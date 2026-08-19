@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import '../../models/livreur_model.dart';
 import '../../services/api_service.dart';
+import '../../services/auth_service.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/loading_widget.dart';
 import '../../widgets/app_drawer.dart';
@@ -17,10 +18,12 @@ class RestaurantScreen extends StatefulWidget {
 }
 
 class _RestaurantScreenState extends State<RestaurantScreen> {
-  PointDeVenteModel? _pdv;
   bool _isLoading = true;
   bool _isSaving = false;
   String? _error;
+  // M3 — avertissement non bloquant (401/accès restreint) : le formulaire
+  // reste affiché, aucune cascade de déconnexion déclenchée par cet écran.
+  String? _warning;
 
   final _formKey = GlobalKey<FormState>();
   late final TextEditingController _nomCtrl;
@@ -62,8 +65,9 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
   }
 
   Future<void> _loadPdv() async {
-    setState(() { _isLoading = true; _error = null; });
+    setState(() { _isLoading = true; _error = null; _warning = null; });
     final api = context.read<ApiService>();
+    final auth = context.read<AuthService>();
     final resp = await api.getPdv();
     if (!mounted) return;
 
@@ -73,11 +77,29 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
       if (pdvData != null) {
         final pdv = PointDeVenteModel.fromJson(pdvData);
         _fillForm(pdv);
-        setState(() { _pdv = pdv; _isLoading = false; });
+        setState(() { _isLoading = false; });
       } else {
-        // Aucun PDV encore créé — formulaire vide, l'API créera au premier PATCH
+        // M3 — Aucun PDV encore créé : formulaire affiché quand même,
+        // pré-rempli avec le nom du tenant. Le web INSÈRE le PDV au premier
+        // PATCH /dashboard/pdv, donc _save fonctionne sans PDV existant.
+        if (_nomCtrl.text.trim().isEmpty) {
+          _nomCtrl.text = auth.tenant?.nom ?? '';
+        }
         setState(() { _isLoading = false; });
       }
+    } else if (resp.isUnauthorized) {
+      // M3 — 401 : PAS de cascade (l'éventuel refresh/logout est géré
+      // globalement par ApiService + redirect go_router). Ici on affiche le
+      // formulaire pré-rempli avec un avertissement non bloquant au lieu de
+      // figer l'écran sur une erreur.
+      if (_nomCtrl.text.trim().isEmpty) {
+        _nomCtrl.text = auth.tenant?.nom ?? '';
+      }
+      setState(() {
+        _warning = 'Impossible de charger le point de vente (accès restreint). '
+            'Vous pouvez renseigner le formulaire et réessayer.';
+        _isLoading = false;
+      });
     } else {
       setState(() { _error = resp.error; _isLoading = false; });
     }
@@ -183,7 +205,8 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
           child: Divider(height: 1, color: AppColors.gray200),
         ),
         actions: [
-          if (!_isLoading && _pdv != null)
+          // M3 — Sauvegarder toujours disponible (le web INSÈRE si PDV absent)
+          if (!_isLoading && _error == null)
             TextButton(
               onPressed: _isSaving ? null : _save,
               child: _isSaving
@@ -200,13 +223,40 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
   Widget _buildBody() {
     if (_isLoading) return const LoadingWidget(message: 'Chargement du restaurant…');
     if (_error != null) return AppErrorWidget(message: _error!, onRetry: _loadPdv);
-    if (_pdv == null) return const Center(child: Text('Aucun point de vente configuré'));
+    // M3 — plus d'écran figé quand _pdv == null : le formulaire est affiché
+    // (pré-rempli avec le nom du tenant) et PATCH /dashboard/pdv crée le PDV.
 
     return Form(
       key: _formKey,
       child: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
         child: Column(children: [
+          // M3 — bandeau d'avertissement non bloquant (401 / accès restreint)
+          if (_warning != null)
+            Container(
+              margin: const EdgeInsets.only(bottom: 12),
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: AppColors.warning.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                    color: AppColors.warning.withValues(alpha: 0.4)),
+              ),
+              child: Row(children: [
+                const Icon(Icons.warning_amber_rounded,
+                    color: AppColors.warning, size: 20),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(_warning!,
+                      style: const TextStyle(
+                          fontSize: 13, color: AppColors.gray800)),
+                ),
+                TextButton(
+                  onPressed: _loadPdv,
+                  child: const Text('Réessayer'),
+                ),
+              ]),
+            ),
           _buildSection('Informations générales', Icons.storefront_rounded, [
             _field(_nomCtrl, 'Nom du restaurant *', Icons.storefront_rounded,
               validator: (v) => (v == null || v.trim().isEmpty) ? 'Nom requis' : null,
