@@ -187,3 +187,55 @@ documenté comme suite possible).
 ---
 
 ## Ordre d'exécution : P0 → P11, commits atomiques conventionnels, `flutter analyze` = 0 issue après chaque incrément.
+
+---
+
+# SESSION 7 — Double audit M1–M9 (avant correction)
+
+## Passe A — Contrats web (HEAD 98223df, read-only)
+
+- **M1/M4 — GET /dashboard/profil** (api-dashboard.ts l.1495-1541) : select tenants inclut
+  `id, nom, slug, email, ..., plan_id` puis `c.json({ ...tenantFinal, plan_nom, ... })`.
+  → **DÉCOUVERTE : `email` ET `plan_id` sont DÉJÀ exposés** par le spread à HEAD 98223df.
+  La modif web M4 documentée dans le prompt est donc DÉJÀ EFFECTIVE — à consigner dans
+  PRE-REQUIS-BACKEND.md comme "déjà présent, aucun changement requis".
+- **M1 — PATCH /dashboard/parametres** (l.1420-1459) : body `{nom (REQUIS ≥2 chars),
+  whatsapp_number?, email?}` ; email regex `^[^\s@]+@[^\s@]+\.[^\s@]+$`, 422 sinon ;
+  email vide → null. ⚠️ `nom` toujours requis, même pour ne changer que l'email.
+- **M2 — GET /dashboard/menu** (l.587) : select produits SANS `photo_r2_key`
+  → le mobile DOIT extraire la clé depuis `photo_url` (fallback prompt). Pattern purge
+  supplements PATCH l.1042 (photo_r2_key lu avant UPDATE) ; produits PATCH l.804-840 : pas de purge.
+- **M3 — PATCH /dashboard/pdv** (l.1290+) : si aucun PDV → INSERT (nom défaut 'Mon restaurant',
+  tarifs 500/200) → utilisable sans distinction création/édition. GET /pdv → { pdv: {...}|null }.
+- **M5 — GET /paiement/statut** (api-paiement.ts l.103-174) : retourne `plan_initial_nom`,
+  `plan_initial_prix_mensuel`, `abonnement.date_fin`, `sla_admin_heures` (=48),
+  `fenetre_acces_heures` (=72), `mode_acces` (constantes src/lib/paiement.ts l.36/39).
+- **M8 — GET /dashboard/stats-journalieres** (l.2115-2145) : retourne
+  `{ stats: [{date, nb_commandes, nb_commandes_livrees, nb_commandes_annulees,
+  chiffre_affaires, frais_livraison_total, top_produits}], totaux: {nb_commandes,
+  chiffre_affaires, nb_jours_actifs, moyenne_journaliere}, periode_jours }`
+  — ordre DESCENDANT par date. (Pas de clé "journalieres" : le contrat réel est {stats, totaux}.)
+- **M9 — POST /dashboard/setup-restaurant** (l.2225-2262) : R2.put logo/bannière avec
+  `contentType: file.type` SANS validerMimeImageUnifie → à documenter (web only).
+
+## Passe B — État mobile (HEAD 88e21f4)
+
+- **M1** : ProfilModel (plan_model.dart l.239-313) : PAS de champ `email` ni `planId`.
+  settings_screen.dart l.146-147 : tile email = support MonMenu (statique).
+- **M2** : menu_screen.dart `_uploadImage` l.658 : `api.uploadImage(filePath)` sans
+  `ancienneCle` ; `_photoUrl` (l.606) contient l'URL actuelle du produit → source d'extraction.
+- **M3** : restaurant_screen.dart l.186 : bouton Sauvegarder seulement si `_pdv != null` ;
+  l.203 : `_pdv == null` → Center('Aucun point de vente configuré') FIGÉ (aucune action).
+- **M4** : plans_screen.dart l.123 : `isCurrent: false` hardcodé (commentaire "plan.id non dispo").
+- **M5** : dashboard_provider expose `_abonnementStatut` brut ; payment_alert_banner.dart
+  l.65-78 : "48h" hardcodé + `heuresRestantesCalculees` local. Aucun champ M5 consommé.
+- **M6** : retryPendingUploadIfNeeded (payment_upload_service.dart l.257) jamais appelé —
+  PaymentUploadService instancié uniquement dans plans_screen. connectivity_plus ^6.1.3
+  déjà dans pubspec (inutilisé).
+- **M7** : notification_service (notif_tenant_, notif_commandes_) ET realtime_service
+  (commandes_realtime_, tenant_statut_) écoutent les MÊMES tables (commandes, tenants) —
+  4 souscriptions pour 2 tables. Usages distincts : toasts locaux vs refresh providers.
+- **M8** : loadStatsJournalieres (dashboard_provider l.109-130) passe la réponse
+  `{stats, totaux, periode_jours}` à `StatsModel.fromJson` qui attend
+  `{labels, values, ca_values}` → parsing silencieusement vide (garde null masque).
+  StatJournaliere.fromJson lui-même est correct champ à champ, c'est l'enveloppe qui est fausse.
