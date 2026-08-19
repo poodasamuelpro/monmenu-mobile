@@ -8,7 +8,9 @@
 //         (couleurs #RRGGBB — l.1374-1415)
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:flutter_image_compress/flutter_image_compress.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
 import '../../services/api_service.dart';
 import '../../services/auth_service.dart';
@@ -229,10 +231,30 @@ class _ApparenceScreenState extends State<ApparenceScreen> {
       }
     });
 
+    // FIX — compresser l'image avant envoi (une photo de galerie 48 MP à
+    // qualité 85 peut encore dépasser les 5 Mo du serveur et être rejetée).
+    String filePath = picked.path;
+    try {
+      final tempDir = await getTemporaryDirectory();
+      final ext = picked.path.split('.').last.toLowerCase();
+      final quality = estLogo ? 80 : 75;
+      final compressed = await FlutterImageCompress.compressAndGetFile(
+        picked.path,
+        '${tempDir.path}/apparence_${estLogo ? 'logo' : 'banniere'}_${DateTime.now().millisecondsSinceEpoch}.jpg',
+        minWidth: estLogo ? 800 : 1600,
+        minHeight: estLogo ? 800 : 1600,
+        quality: quality,
+        format: ext == 'png' ? CompressFormat.png : CompressFormat.jpg,
+      );
+      if (compressed != null) filePath = compressed.path;
+    } catch (_) {
+      // En cas d'échec de compression, on envoie l'original.
+    }
+
     // Ancienne clé R2 à purger (extraite de l'URL actuelle)
     final ancienneCle = _extraireCleR2(estLogo ? _logoUrl : _banniereUrl);
 
-    final resp = await api.uploadImage(picked.path, ancienneCle: ancienneCle);
+    final resp = await api.uploadImage(filePath, ancienneCle: ancienneCle);
 
     if (!mounted) return;
 
