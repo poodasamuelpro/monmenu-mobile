@@ -77,6 +77,27 @@ dont le select inclut ces colonnes. **Aucune modification web nécessaire** :
 le mobile consomme directement `plan_id` (surlignage du plan actuel dans
 l'écran Plans, fallback `plan_nom` si `plan_id` est null).
 
+## 11. Magic bytes sur setup-restaurant (M9 — correction web recommandée)
+**Constat (HEAD 98223df)** : `POST /dashboard/setup-restaurant`
+(`src/routes/api-dashboard.ts` l.2225-2262) écrit logo/bannière dans R2 avec
+`contentType: file.type` (MIME déclaré par le client) **sans validation des
+magic bytes**, alors que les autres routes d'upload valident le contenu réel :
+- `POST /dashboard/upload-image` → `validerMimeImageUnifie` (import l.116)
+- `POST /paiement/upload-preuve` → `validerMimeImageUnifie`
+  (`api-paiement.ts` l.294, pattern A-04)
+
+**Risque** : un fichier non-image (HTML/SVG avec script, exécutable) peut être
+stocké et servi avec un Content-Type image détourné.
+
+**Correction web recommandée** : dans setup-restaurant (~l.2228-2260), avant
+chaque `R2.put`, lire le buffer et appeler `validerMimeImageUnifie(buffer)`
+(`src/lib/validation.ts` l.54) ; si retour `null` → réponse 415, sinon utiliser
+le MIME détecté (pas `file.type`) comme `contentType`. Répliquer exactement le
+pattern d'`api-paiement.ts` l.294.
+
+**Côté mobile** : aucun impact — le mobile n'appelle pas setup-restaurant
+(onboarding effectué sur le web).
+
 ## Récapitulatif
 | Pré-requis | État backend | Action requise |
 |---|---|---|
@@ -84,3 +105,4 @@ l'écran Plans, fallback `plan_nom` si `plan_id` est null).
 | Toutes les routes API listées | Présentes à HEAD 98223df | Aucune |
 | CSRF exemption Bearer | En place (api-supplements.ts) | Aucune |
 | Purge R2 photos produits (PATCH produits/:id) | Absente à HEAD 98223df | Copier pattern supplements l.1042 |
+| Magic bytes setup-restaurant | Absents à HEAD 98223df | validerMimeImageUnifie avant R2.put (pattern api-paiement l.294) |
